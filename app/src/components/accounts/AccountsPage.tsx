@@ -372,18 +372,31 @@ function AccountDetailPanel({ account, onClose, onEdit }: { account: Account; on
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
 
-    const [txRes, inboxRes, allTxRes] = await Promise.all([
+    const [txRes, inboxRes, allTxRes, verifiedInboxRes, reconciledRes] = await Promise.all([
       supabase.from('bank_transactions').select('*').eq('account_id', account.id).order('transaction_date', { ascending: false }).limit(15),
       supabase.from('inbox_items').select('*, client:b2b_clients(name)').eq('account_id', account.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('bank_transactions').select('amount, is_credit').eq('account_id', account.id),
+      // Get all verified/aplicado inbox_items with amount for this account (for balance)
+      supabase.from('inbox_items').select('id, amount').eq('account_id', account.id).in('status', ['verificado', 'aplicado']).not('amount', 'is', null),
+      // Get reconciled inbox_item_ids to avoid double-counting
+      supabase.from('reconciliations').select('inbox_item_id').eq('status', 'confirmado'),
     ]);
 
     setTransactions((txRes.data as BankTransaction[]) || []);
     setInbox((inboxRes.data as InboxItem[]) || []);
 
-    const all = (allTxRes.data || []) as { amount: number; is_credit: boolean }[];
-    const credits = all.filter(t => t.is_credit).reduce((s, t) => s + t.amount, 0);
-    const debits = all.filter(t => !t.is_credit).reduce((s, t) => s + t.amount, 0);
+    // Bank transaction totals
+    const allTx = (allTxRes.data || []) as { amount: number; is_credit: boolean }[];
+    const txCredits = allTx.filter(t => t.is_credit).reduce((s, t) => s + t.amount, 0);
+    const txDebits = allTx.filter(t => !t.is_credit).reduce((s, t) => s + t.amount, 0);
+
+    // Verified comprobantes NOT yet reconciled (to avoid double-counting with bank_transactions)
+    const reconciledIds = new Set((reconciledRes.data || []).map((r: { inbox_item_id: string }) => r.inbox_item_id));
+    const unreconciled = (verifiedInboxRes.data || []).filter((i: { id: string; amount: number }) => !reconciledIds.has(i.id));
+    const inboxCredits = unreconciled.reduce((s: number, i: { amount: number }) => s + (i.amount || 0), 0);
+
+    const credits = txCredits + inboxCredits;
+    const debits = txDebits;
     setBalance({ credits, debits, total: credits - debits });
     setLoading(false);
   }

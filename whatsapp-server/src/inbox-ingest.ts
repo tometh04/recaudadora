@@ -85,39 +85,35 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
 
     console.log(`[Ingest] Uploaded to Supabase Storage: ${storagePath}`);
 
-    // 2b. For PDFs: convert first page to JPEG and upload that too
-    let ocrImageUrl = publicUrl;
+    // 2b. For PDFs: convert first page to JPEG for OCR
     const isPdf = (msg.mimeType || '').includes('pdf') || ext === 'pdf';
+    let ocrLocalPath = fullPath;  // Local file to use for OCR (will be converted for PDFs)
+    let ocrMimeType = msg.mimeType || 'image/jpeg';
 
     if (isPdf) {
       console.log(`[Ingest] PDF detected, converting first page to image...`);
       const jpegPath = convertPdfToJpeg(fullPath);
 
       if (jpegPath && existsSync(jpegPath)) {
+        // Also upload the converted JPEG to Supabase for reference
         const jpegBuffer = readFileSync(jpegPath);
         const jpegStoragePath = storagePath.replace(`.${ext}`, '_page1.jpg');
 
-        const { error: jpegUploadError } = await supabase.storage
+        await supabase.storage
           .from('comprobantes')
           .upload(jpegStoragePath, jpegBuffer, {
             contentType: 'image/jpeg',
             upsert: false,
-          });
+          }).catch(() => {});
 
-        if (!jpegUploadError) {
-          const { data: { publicUrl: jpegPublicUrl } } = supabase.storage
-            .from('comprobantes')
-            .getPublicUrl(jpegStoragePath);
-          ocrImageUrl = jpegPublicUrl;
-          console.log(`[Ingest] PDF page 1 uploaded: ${jpegStoragePath}`);
-        }
-
-        // Clean up temp JPEG file
-        try { unlinkSync(jpegPath); } catch {}
+        ocrLocalPath = jpegPath;
+        ocrMimeType = 'image/jpeg';
+        console.log(`[Ingest] PDF converted to JPEG for OCR: ${jpegPath}`);
       } else {
-        // Fallback: send the PDF as base64 data URL (won't work with OpenAI Vision,
-        // but at least the inbox_item gets created)
-        console.warn(`[Ingest] PDF conversion failed, OCR may not work`);
+        console.warn(`[Ingest] PDF conversion failed (pdftoppm not available?), will try base64 fallback`);
+        // Fallback: we'll try to send the raw file as base64 anyway
+        ocrLocalPath = fullPath;
+        ocrMimeType = 'image/jpeg'; // Try as JPEG anyway, some PDFs contain embedded images
       }
     }
 
@@ -149,8 +145,8 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
     const inboxItemId = inboxItem.id;
     console.log(`[Ingest] Created inbox_item ${inboxItemId} for message ${msg.id}`);
 
-    // 5. Run OCR in background (non-blocking)
-    runOcrInBackground(inboxItemId, ocrImageUrl).catch((err) =>
+    // 5. Run OCR in background using local file as base64 (non-blocking)
+    runOcrInBackground(inboxItemId, ocrLocalPath, ocrMimeType).catch((err) =>
       console.error(`[Ingest] Background OCR error:`, err)
     );
 
@@ -254,12 +250,33 @@ async function matchAccount(bankName: string | null): Promise<string | null> {
   return null;
 }
 
-async function runOcrInBackground(inboxItemId: string, imageUrl: string): Promise<void> {
+async function runOcrInBackground(inboxItemId: string, localFilePath: string, mimeType: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
 
   const startTime = Date.now();
-  const ocr = await processOcr(imageUrl);
+
+  // Read local file and convert to base64 data URL for OpenAI Vision
+  let dataUrl: string;
+  try {
+    const buffer = readFileSync(localFilePath);
+    const base64 = buffer.toString('base64');
+    // Ensure we use image mime type for OpenAI Vision
+    const ocrMime = mimeType.includes('pdf') ? 'image/jpeg' : mimeType;
+    dataUrl = `data:${ocrMime};base64,${base64}`;
+    console.log(`[Ingest] Prepared base64 data URL for OCR (${Math.round(buffer.length / 1024)}KB, ${ocrMime})`);
+  } catch (err) {
+    console.error(`[Ingest] Failed to read file for OCR: ${localFilePath}`, err);
+    await supabase.from('inbox_items').update({ status: 'recibido' }).eq('id', inboxItemId);
+    return;
+  }
+
+  // Clean up converted JPEG files after reading
+  if (localFilePath.includes('_page') && localFilePath.endsWith('.jpg')) {
+    try { unlinkSync(localFilePath); } catch {}
+  }
+
+  const ocr = await processOcr(dataUrl);
 
   if (!ocr) {
     // OCR failed or not configured — leave as "recibido"

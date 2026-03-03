@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isDemoMode } from '@/lib/use-demo';
 import { DEMO_INBOX, DEMO_CLIENTS, DEMO_ACCOUNTS } from '@/lib/demo-data';
+import { useAppStore } from '@/lib/store';
 import {
   FileCheck,
   Search,
@@ -13,6 +14,8 @@ import {
   Copy,
   X,
   ImageIcon,
+  User,
+  Building2,
 } from 'lucide-react';
 import {
   cn,
@@ -150,6 +153,36 @@ export default function InboxPage() {
     return true;
   });
 
+  // When opening a comprobante, auto-mark as pendiente_verificacion to reduce badge
+  const handleSelectItem = useCallback(async (item: InboxItem) => {
+    setSelectedItem(item);
+
+    const needsStatusUpdate = item.status === 'recibido' || item.status === 'ocr_listo';
+    if (needsStatusUpdate && !isDemoMode()) {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      await supabase
+        .from('inbox_items')
+        .update({ status: 'pendiente_verificacion' })
+        .eq('id', item.id);
+
+      // Update local state
+      setItems(prev => prev.map(i =>
+        i.id === item.id ? { ...i, status: 'pendiente_verificacion' as InboxStatus } : i
+      ));
+      setSelectedItem({ ...item, status: 'pendiente_verificacion' as InboxStatus });
+
+      // Refresh badge count
+      const { count } = await supabase
+        .from('inbox_items')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['recibido', 'ocr_procesando', 'ocr_listo']);
+      if (count !== null) {
+        useAppStore.getState().setInboxUnprocessedCount(count);
+      }
+    }
+  }, []);
+
   const statusCounts = items.reduce(
     (acc, item) => {
       acc[item.status] = (acc[item.status] || 0) + 1;
@@ -278,7 +311,7 @@ export default function InboxPage() {
                   <tr
                     key={item.id}
                     className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer transition"
-                    onClick={() => setSelectedItem(item)}
+                    onClick={() => handleSelectItem(item)}
                   >
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -339,7 +372,7 @@ export default function InboxPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedItem(item);
+                            handleSelectItem(item);
                           }}
                           className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition"
                           title="Ver detalle"
@@ -435,6 +468,26 @@ function ItemDetailModal({
   const [amount, setAmount] = useState(item.amount?.toString() || '');
   const [txDate, setTxDate] = useState(item.transaction_date || '');
   const [reference, setReference] = useState(item.reference_number || '');
+  const [ocrData, setOcrData] = useState<Record<string, any> | null>(null);
+
+  // Load OCR extracted data (sender, receiver, bank)
+  useEffect(() => {
+    if (isDemoMode()) return;
+    (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('ocr_results')
+          .select('raw_response')
+          .eq('inbox_item_id', item.id)
+          .maybeSingle();
+        if (data?.raw_response) {
+          setOcrData(data.raw_response as Record<string, any>);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [item.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -478,7 +531,7 @@ function ItemDetailModal({
               </p>
               {item.wa_phone_number && (
                 <p className="text-xs text-slate-500">
-                  Teléfono:{' '}
+                  Telefono:{' '}
                   <span className="text-slate-300">
                     {item.wa_phone_number}
                   </span>
@@ -491,6 +544,55 @@ function ItemDetailModal({
                 </span>
               </p>
             </div>
+
+            {/* OCR Extracted Info */}
+            {ocrData && (
+              <div className="mt-4 space-y-2">
+                {(ocrData.sender_name || ocrData.sender_cuit) && (
+                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <User className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="text-xs font-medium text-blue-400">Emisor (OCR)</span>
+                    </div>
+                    {ocrData.sender_name && (
+                      <p className="text-sm text-white">{ocrData.sender_name}</p>
+                    )}
+                    {ocrData.sender_cuit && (
+                      <p className="text-xs text-slate-400">CUIT: {ocrData.sender_cuit}</p>
+                    )}
+                  </div>
+                )}
+                {(ocrData.receiver_name || ocrData.receiver_cuit) && (
+                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Building2 className="w-3.5 h-3.5 text-green-400" />
+                      <span className="text-xs font-medium text-green-400">Receptor (OCR)</span>
+                    </div>
+                    {ocrData.receiver_name && (
+                      <p className="text-sm text-white">{ocrData.receiver_name}</p>
+                    )}
+                    {ocrData.receiver_cuit && (
+                      <p className="text-xs text-slate-400">CUIT: {ocrData.receiver_cuit}</p>
+                    )}
+                  </div>
+                )}
+                {ocrData.bank_name && (
+                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Building2 className="w-3.5 h-3.5 text-yellow-400" />
+                      <span className="text-xs font-medium text-yellow-400">Entidad (OCR)</span>
+                    </div>
+                    <p className="text-sm text-white">{ocrData.bank_name}</p>
+                    {ocrData.account_number && (
+                      <p className="text-xs text-slate-400">Cuenta: {ocrData.account_number}</p>
+                    )}
+                  </div>
+                )}
+                {ocrData.description && (
+                  <p className="text-xs text-slate-500 italic">{ocrData.description}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Form */}
@@ -522,6 +624,11 @@ function ItemDetailModal({
                   </option>
                 ))}
               </select>
+              {!clientId && ocrData?.sender_name && (
+                <p className="text-xs text-blue-400 mt-1">
+                  OCR detecta: {ocrData.sender_name}
+                </p>
+              )}
             </div>
 
             <div>
@@ -540,6 +647,11 @@ function ItemDetailModal({
                   </option>
                 ))}
               </select>
+              {!accountId && ocrData?.bank_name && (
+                <p className="text-xs text-yellow-400 mt-1">
+                  OCR detecta: {ocrData.bank_name}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

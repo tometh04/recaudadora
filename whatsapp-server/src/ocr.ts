@@ -41,6 +41,10 @@ Si no podés extraer un campo, poné null y confianza 0.
 
 Respondé ÚNICAMENTE con un JSON válido, sin texto extra ni markdown.`;
 
+/**
+ * Process OCR on an image URL or a base64 data URL.
+ * Accepts either a public URL (https://...) or a data URL (data:image/jpeg;base64,...).
+ */
 export async function processOcr(imageUrl: string): Promise<OcrExtraction | null> {
   if (!config.OPENAI_API_KEY) {
     console.warn('[OCR] OpenAI API key not configured, skipping OCR');
@@ -49,6 +53,8 @@ export async function processOcr(imageUrl: string): Promise<OcrExtraction | null
 
   try {
     const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
+
+    console.log(`[OCR] Processing image: ${imageUrl.startsWith('data:') ? 'base64 data URL' : imageUrl.slice(0, 80)}`);
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

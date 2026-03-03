@@ -49,7 +49,7 @@ export default function Sidebar() {
         const { count, error } = await supabase
           .from('inbox_items')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['recibido', 'ocr_procesando', 'ocr_listo', 'pendiente_verificacion']);
+          .in('status', ['recibido', 'ocr_procesando', 'ocr_listo']);
 
         if (!error && count !== null) {
           setInboxUnprocessedCount(count);

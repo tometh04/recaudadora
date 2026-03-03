@@ -229,6 +229,11 @@ export class SessionManager {
       mimeType = 'image/webp';
     }
 
+    // Skip protocol/system messages (read receipts, presence, reactions, etc.)
+    if (messageType === 'other') {
+      return;
+    }
+
     // Download media if present
     if (['image', 'video', 'document', 'audio', 'sticker'].includes(messageType)) {
       try {

@@ -8,9 +8,10 @@
  *   3. Look up sender phone → client mapping
  *   4. Create inbox_item with status "ocr_procesando"
  *   5. Run OCR with OpenAI Vision
- *   6. Auto-match bank_name → account in accounts table
- *   7. Update inbox_item with extracted data → status "ocr_listo"
- *   8. Create ocr_results record
+ *   6. Auto-find or CREATE client from OCR sender data
+ *   7. Auto-find or CREATE account from OCR receiver/bank data
+ *   8. Update inbox_item with extracted data → status "ocr_listo"
+ *   9. Create ocr_results record
  */
 
 import { readFileSync, existsSync, unlinkSync } from 'fs';
@@ -22,6 +23,21 @@ import { getSupabase, isSupabaseConfigured } from './supabase.js';
 import { processOcr, confidenceLabel } from './ocr.js';
 import { convertPdfToJpeg, fileToBase64DataUrl } from './pdf-to-image.js';
 import type { WhatsAppMessage } from './types.js';
+
+// ============================================================
+// Billeteras virtuales vs bancos tradicionales
+// ============================================================
+
+const BILLETERAS = ['mercado pago', 'mercadopago', 'uala', 'ualá', 'brubank', 'naranja x', 'naranja', 'personal pay', 'modo', 'bimo', 'lemon', 'buenbit'];
+
+function isBilletera(bankName: string): boolean {
+  const lower = bankName.toLowerCase();
+  return BILLETERAS.some(b => lower.includes(b));
+}
+
+// ============================================================
+// Main ingestion
+// ============================================================
 
 export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string | null): Promise<void> {
   if (!isSupabaseConfigured()) {
@@ -87,7 +103,7 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
 
     // 2b. For PDFs: convert first page to JPEG for OCR
     const isPdf = (msg.mimeType || '').includes('pdf') || ext === 'pdf';
-    let ocrLocalPath = fullPath;  // Local file to use for OCR (will be converted for PDFs)
+    let ocrLocalPath = fullPath;
     let ocrMimeType = msg.mimeType || 'image/jpeg';
 
     if (isPdf) {
@@ -95,7 +111,6 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
       const jpegPath = convertPdfToJpeg(fullPath);
 
       if (jpegPath && existsSync(jpegPath)) {
-        // Also upload the converted JPEG to Supabase for reference
         const jpegBuffer = readFileSync(jpegPath);
         const jpegStoragePath = storagePath.replace(`.${ext}`, '_page1.jpg');
 
@@ -110,16 +125,15 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
         ocrMimeType = 'image/jpeg';
         console.log(`[Ingest] PDF converted to JPEG for OCR: ${jpegPath}`);
       } else {
-        console.warn(`[Ingest] PDF conversion failed (pdftoppm not available?), will try base64 fallback`);
-        // Fallback: we'll try to send the raw file as base64 anyway
+        console.warn(`[Ingest] PDF conversion failed, will try base64 fallback`);
         ocrLocalPath = fullPath;
-        ocrMimeType = 'image/jpeg'; // Try as JPEG anyway, some PDFs contain embedded images
+        ocrMimeType = 'image/jpeg';
       }
     }
 
-    // 3. Look up sender phone → client
+    // 3. Look up sender phone → client (initial, before OCR)
     const cleanPhone = msg.phoneNumber.replace(/\D/g, '');
-    let clientId = await findClientByPhone(cleanPhone);
+    const initialClientId = await findClientByPhone(cleanPhone);
 
     // 4. Create inbox_item with "ocr_procesando" status
     const { data: inboxItem, error: insertError } = await supabase
@@ -130,7 +144,7 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
         wa_message_id: msg.id,
         wa_phone_number: cleanPhone,
         wa_timestamp: new Date(msg.timestamp * 1000).toISOString(),
-        client_id: clientId,
+        client_id: initialClientId,
         original_image_url: publicUrl,
         notes: msg.textContent ? `Caption: ${msg.textContent}` : null,
       })
@@ -145,8 +159,8 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
     const inboxItemId = inboxItem.id;
     console.log(`[Ingest] Created inbox_item ${inboxItemId} for message ${msg.id}`);
 
-    // 5. Run OCR in background using local file as base64 (non-blocking)
-    runOcrInBackground(inboxItemId, ocrLocalPath, ocrMimeType).catch((err) =>
+    // 5. Run OCR in background (non-blocking)
+    runOcrInBackground(inboxItemId, ocrLocalPath, ocrMimeType, cleanPhone, msg.pushName).catch((err) =>
       console.error(`[Ingest] Background OCR error:`, err)
     );
 
@@ -155,12 +169,14 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
   }
 }
 
-/** Look up client by phone number, trying multiple formats */
+// ============================================================
+// Find client by phone (existing records only)
+// ============================================================
+
 async function findClientByPhone(cleanPhone: string): Promise<string | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  // Try multiple phone formats (Argentine numbers)
   const phonesToTry = [
     cleanPhone,
     cleanPhone.replace(/^549/, ''),
@@ -183,74 +199,240 @@ async function findClientByPhone(cleanPhone: string): Promise<string | null> {
   return null;
 }
 
-/** Try to match OCR bank_name to an account in the accounts table */
-async function matchAccount(bankName: string | null): Promise<string | null> {
+// ============================================================
+// Find or CREATE client from OCR data + phone
+// ============================================================
+
+async function findOrCreateClient(
+  cleanPhone: string,
+  pushName: string | null,
+  senderName: string | null,
+  senderCuit: string | null,
+): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  // 1. Try finding by phone first
+  const byPhone = await findClientByPhone(cleanPhone);
+  if (byPhone) {
+    console.log(`[Ingest] Client found by phone: ${byPhone}`);
+    return byPhone;
+  }
+
+  // 2. Try finding by CUIT if available
+  if (senderCuit) {
+    const normalizedCuit = senderCuit.replace(/[-\s]/g, '');
+    const { data: byCuit } = await supabase
+      .from('b2b_clients')
+      .select('id')
+      .eq('tax_id', normalizedCuit)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (byCuit) {
+      console.log(`[Ingest] Client found by CUIT ${normalizedCuit}: ${byCuit.id}`);
+      // Also register this phone for future lookups
+      await registerPhone(byCuit.id, cleanPhone);
+      return byCuit.id;
+    }
+  }
+
+  // 3. Try finding by name (exact match)
+  const name = senderName || pushName;
+  if (name) {
+    const { data: byName } = await supabase
+      .from('b2b_clients')
+      .select('id')
+      .ilike('name', name.trim())
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (byName) {
+      console.log(`[Ingest] Client found by name "${name}": ${byName.id}`);
+      await registerPhone(byName.id, cleanPhone);
+      return byName.id;
+    }
+  }
+
+  // 4. Not found → CREATE new client
+  const clientName = senderName || pushName || `WhatsApp ${cleanPhone}`;
+  const normalizedCuit = senderCuit ? senderCuit.replace(/[-\s]/g, '') : null;
+
+  const { data: newClient, error: createError } = await supabase
+    .from('b2b_clients')
+    .insert({
+      name: clientName,
+      tax_id: normalizedCuit,
+      contact_phone: cleanPhone,
+      notes: `Auto-creado desde WhatsApp${senderCuit ? ` | CUIT: ${senderCuit}` : ''}`,
+    })
+    .select('id')
+    .single();
+
+  if (createError) {
+    console.error(`[Ingest] Error creating client:`, createError.message);
+    return null;
+  }
+
+  console.log(`[Ingest] Created new client "${clientName}" → ${newClient.id}`);
+
+  // Register phone for this new client
+  await registerPhone(newClient.id, cleanPhone);
+
+  return newClient.id;
+}
+
+/** Register a phone number for a client (idempotent) */
+async function registerPhone(clientId: string, cleanPhone: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  // Check if already registered
+  const { data: existing } = await supabase
+    .from('client_phones')
+    .select('id')
+    .eq('phone_number', cleanPhone)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const { error } = await supabase
+    .from('client_phones')
+    .insert({
+      client_id: clientId,
+      phone_number: cleanPhone,
+      label: 'WhatsApp',
+    });
+
+  if (error) {
+    // UNIQUE violation is OK (race condition)
+    if (!error.message.includes('duplicate') && !error.message.includes('unique')) {
+      console.error(`[Ingest] Error registering phone:`, error.message);
+    }
+  } else {
+    console.log(`[Ingest] Registered phone ${cleanPhone} for client ${clientId}`);
+  }
+}
+
+// ============================================================
+// Find or CREATE account from OCR data
+// ============================================================
+
+async function findOrCreateAccount(
+  bankName: string | null,
+  accountNumber: string | null,
+  receiverName: string | null,
+  receiverCuit: string | null,
+): Promise<string | null> {
   if (!bankName) return null;
 
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const { data: accounts } = await supabase
-    .from('accounts')
-    .select('id, name, bank_name')
-    .eq('is_active', true);
-
-  if (!accounts || accounts.length === 0) return null;
-
   const normalizedBank = bankName.toLowerCase().trim();
 
-  // Exact or partial match on name or bank_name
-  for (const account of accounts) {
-    const accName = (account.name || '').toLowerCase();
-    const accBank = (account.bank_name || '').toLowerCase();
+  // 1. Try finding existing account by bank_name or cbu
+  const { data: accounts } = await supabase
+    .from('accounts')
+    .select('id, name, bank_name, cbu, account_number')
+    .eq('is_active', true);
 
-    if (
-      accName.includes(normalizedBank) ||
-      accBank.includes(normalizedBank) ||
-      normalizedBank.includes(accName) ||
-      normalizedBank.includes(accBank)
-    ) {
-      console.log(`[Ingest] Matched bank "${bankName}" → account "${account.name}" (${account.id})`);
-      return account.id;
-    }
-  }
+  if (accounts && accounts.length > 0) {
+    // Direct match on bank_name
+    for (const account of accounts) {
+      const accName = (account.name || '').toLowerCase();
+      const accBank = (account.bank_name || '').toLowerCase();
+      const accCbu = (account.cbu || '').toLowerCase();
 
-  // Common aliases
-  const aliases: Record<string, string[]> = {
-    'mercado pago': ['mercadopago', 'mp', 'mercado libre'],
-    'banco macro': ['macro'],
-    'banco credicoop': ['credicoop'],
-    'banco nacion': ['nacion', 'bna'],
-    'banco provincia': ['provincia', 'bapro'],
-    'banco galicia': ['galicia'],
-    'banco santander': ['santander'],
-    'banco bbva': ['bbva', 'frances'],
-    'banco hsbc': ['hsbc'],
-    'brubank': ['brubank'],
-    'uala': ['ualá', 'uala'],
-    'naranja x': ['naranja'],
-  };
-
-  for (const account of accounts) {
-    const accName = (account.name || '').toLowerCase();
-    const accBank = (account.bank_name || '').toLowerCase();
-
-    for (const [key, alts] of Object.entries(aliases)) {
-      const bankMatches = normalizedBank.includes(key) || alts.some(a => normalizedBank.includes(a));
-      const accMatches = accName.includes(key) || accBank.includes(key) ||
-        alts.some(a => accName.includes(a) || accBank.includes(a));
-
-      if (bankMatches && accMatches) {
-        console.log(`[Ingest] Matched bank "${bankName}" → account "${account.name}" via alias`);
+      // Match by CBU/CVU
+      if (accountNumber && accCbu && accountNumber.includes(accCbu)) {
+        console.log(`[Ingest] Account matched by CBU: ${account.name} (${account.id})`);
         return account.id;
+      }
+
+      // Match by bank name
+      if (
+        accName.includes(normalizedBank) ||
+        accBank.includes(normalizedBank) ||
+        normalizedBank.includes(accName) ||
+        normalizedBank.includes(accBank)
+      ) {
+        console.log(`[Ingest] Account matched by bank: ${account.name} (${account.id})`);
+        return account.id;
+      }
+    }
+
+    // Alias matching
+    const aliases: Record<string, string[]> = {
+      'mercado pago': ['mercadopago', 'mp', 'mercado libre'],
+      'banco macro': ['macro'],
+      'banco credicoop': ['credicoop'],
+      'banco nacion': ['nacion', 'bna'],
+      'banco provincia': ['provincia', 'bapro'],
+      'banco galicia': ['galicia'],
+      'banco santander': ['santander'],
+      'banco bbva': ['bbva', 'frances'],
+      'banco hsbc': ['hsbc'],
+      'brubank': ['brubank'],
+      'uala': ['ualá', 'uala'],
+      'naranja x': ['naranja'],
+    };
+
+    for (const account of accounts) {
+      const accName = (account.name || '').toLowerCase();
+      const accBank = (account.bank_name || '').toLowerCase();
+
+      for (const [key, alts] of Object.entries(aliases)) {
+        const bankMatches = normalizedBank.includes(key) || alts.some(a => normalizedBank.includes(a));
+        const accMatches = accName.includes(key) || accBank.includes(key) ||
+          alts.some(a => accName.includes(a) || accBank.includes(a));
+
+        if (bankMatches && accMatches) {
+          console.log(`[Ingest] Account matched via alias: ${account.name} (${account.id})`);
+          return account.id;
+        }
       }
     }
   }
 
-  return null;
+  // 2. Not found → CREATE new account
+  const accountType = isBilletera(bankName) ? 'billetera' : 'banco';
+  const displayName = receiverName
+    ? `${bankName} - ${receiverName}`
+    : bankName;
+
+  const { data: newAccount, error: createError } = await supabase
+    .from('accounts')
+    .insert({
+      name: displayName,
+      account_type: accountType,
+      bank_name: bankName,
+      cbu: accountNumber || null,
+      notes: `Auto-creado desde OCR${receiverCuit ? ` | CUIT receptor: ${receiverCuit}` : ''}`,
+    })
+    .select('id')
+    .single();
+
+  if (createError) {
+    console.error(`[Ingest] Error creating account:`, createError.message);
+    return null;
+  }
+
+  console.log(`[Ingest] Created new account "${displayName}" (${accountType}) → ${newAccount.id}`);
+  return newAccount.id;
 }
 
-async function runOcrInBackground(inboxItemId: string, localFilePath: string, mimeType: string): Promise<void> {
+// ============================================================
+// Background OCR + auto-create client/account
+// ============================================================
+
+async function runOcrInBackground(
+  inboxItemId: string,
+  localFilePath: string,
+  mimeType: string,
+  cleanPhone: string,
+  pushName: string | null,
+): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
 
@@ -261,7 +443,6 @@ async function runOcrInBackground(inboxItemId: string, localFilePath: string, mi
   try {
     const buffer = readFileSync(localFilePath);
     const base64 = buffer.toString('base64');
-    // Ensure we use image mime type for OpenAI Vision
     const ocrMime = mimeType.includes('pdf') ? 'image/jpeg' : mimeType;
     dataUrl = `data:${ocrMime};base64,${base64}`;
     console.log(`[Ingest] Prepared base64 data URL for OCR (${Math.round(buffer.length / 1024)}KB, ${ocrMime})`);
@@ -279,7 +460,6 @@ async function runOcrInBackground(inboxItemId: string, localFilePath: string, mi
   const ocr = await processOcr(dataUrl);
 
   if (!ocr) {
-    // OCR failed or not configured — leave as "recibido"
     await supabase
       .from('inbox_items')
       .update({ status: 'recibido' })
@@ -289,10 +469,23 @@ async function runOcrInBackground(inboxItemId: string, localFilePath: string, mi
 
   const processingTimeMs = Date.now() - startTime;
 
-  // Auto-match account by bank name
-  const accountId = await matchAccount(ocr.bank_name);
+  // ---- Auto-find or CREATE client ----
+  const clientId = await findOrCreateClient(
+    cleanPhone,
+    pushName,
+    ocr.sender_name,
+    ocr.sender_cuit,
+  );
 
-  // Update inbox_item with OCR results + auto-matched account
+  // ---- Auto-find or CREATE account ----
+  const accountId = await findOrCreateAccount(
+    ocr.bank_name,
+    ocr.account_number,
+    ocr.receiver_name,
+    ocr.receiver_cuit,
+  );
+
+  // Update inbox_item with OCR results + client + account
   const updatePayload: Record<string, any> = {
     status: 'ocr_listo',
     amount: ocr.amount,
@@ -303,6 +496,9 @@ async function runOcrInBackground(inboxItemId: string, localFilePath: string, mi
     ocr_reference_confidence: confidenceLabel(ocr.reference_confidence),
   };
 
+  if (clientId) {
+    updatePayload.client_id = clientId;
+  }
   if (accountId) {
     updatePayload.account_id = accountId;
   }
@@ -342,6 +538,8 @@ async function runOcrInBackground(inboxItemId: string, localFilePath: string, mi
 
   console.log(
     `[Ingest] OCR complete for ${inboxItemId}: ` +
-    `$${ocr.amount} | ${ocr.date} | ref:${ocr.reference} | bank:${ocr.bank_name} | acct:${accountId || 'none'} | ${processingTimeMs}ms`
+    `$${ocr.amount} | ${ocr.date} | ref:${ocr.reference} | ` +
+    `sender:${ocr.sender_name || 'unknown'} → client:${clientId || 'none'} | ` +
+    `bank:${ocr.bank_name} → acct:${accountId || 'none'} | ${processingTimeMs}ms`
   );
 }

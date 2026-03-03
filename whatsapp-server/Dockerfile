@@ -18,8 +18,9 @@ RUN npx tsc
 # Create directories for runtime data
 RUN mkdir -p auth_sessions media
 
-# Expose port
-EXPOSE 3001
+# Railway sets PORT dynamically
+ENV PORT=3001
+EXPOSE $PORT
 
 # Start server
 CMD ["node", "dist/index.js"]

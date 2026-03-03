@@ -101,10 +101,11 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
 
     console.log(`[Ingest] Uploaded to Supabase Storage: ${storagePath}`);
 
-    // 2b. For PDFs: convert first page to JPEG for OCR
+    // 2b. For PDFs: convert first page to JPEG for OCR + preview
     const isPdf = (msg.mimeType || '').includes('pdf') || ext === 'pdf';
     let ocrLocalPath = fullPath;
     let ocrMimeType = msg.mimeType || 'image/jpeg';
+    let processedImageUrl: string | null = null;
 
     if (isPdf) {
       console.log(`[Ingest] PDF detected, converting first page to image...`);
@@ -114,12 +115,20 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
         const jpegBuffer = readFileSync(jpegPath);
         const jpegStoragePath = storagePath.replace(`.${ext}`, '_page1.jpg');
 
-        await supabase.storage
+        const { error: jpegUploadError } = await supabase.storage
           .from('comprobantes')
           .upload(jpegStoragePath, jpegBuffer, {
             contentType: 'image/jpeg',
             upsert: false,
-          }).catch(() => {});
+          });
+
+        if (!jpegUploadError) {
+          const { data: { publicUrl: jpegPublicUrl } } = supabase.storage
+            .from('comprobantes')
+            .getPublicUrl(jpegStoragePath);
+          processedImageUrl = jpegPublicUrl;
+          console.log(`[Ingest] PDF preview JPEG uploaded: ${jpegStoragePath}`);
+        }
 
         ocrLocalPath = jpegPath;
         ocrMimeType = 'image/jpeg';
@@ -146,6 +155,7 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
         wa_timestamp: new Date(msg.timestamp * 1000).toISOString(),
         client_id: initialClientId,
         original_image_url: publicUrl,
+        processed_image_url: processedImageUrl,
         notes: msg.textContent ? `Caption: ${msg.textContent}` : null,
       })
       .select('id')

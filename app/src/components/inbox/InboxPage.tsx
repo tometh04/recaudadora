@@ -316,9 +316,9 @@ export default function InboxPage() {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center shrink-0">
-                          {item.original_image_url ? (
+                          {(item.processed_image_url || item.original_image_url) ? (
                             <img
-                              src={item.original_image_url}
+                              src={item.processed_image_url || item.original_image_url!}
                               alt=""
                               className="w-10 h-10 object-cover rounded-lg"
                             />
@@ -509,11 +509,11 @@ function ItemDetailModal({
         </div>
 
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Image */}
+          {/* Image / PDF preview */}
           <div>
-            {item.original_image_url ? (
+            {(item.processed_image_url || item.original_image_url) ? (
               <img
-                src={item.original_image_url}
+                src={item.processed_image_url || item.original_image_url!}
                 alt="Comprobante"
                 className="w-full rounded-lg border border-slate-700"
               />

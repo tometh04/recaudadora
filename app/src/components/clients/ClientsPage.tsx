@@ -17,6 +17,10 @@ import {
   ExternalLink,
   FileCheck,
   BookOpen,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  CheckSquare,
 } from 'lucide-react';
 import { cn, formatDate, formatCurrency, formatDateTime, STATUS_LABELS, STATUS_COLORS } from '@/lib/utils';
 import type { B2BClient, ClientPhone, LedgerEntry, InboxItem, ClientBalance, LedgerEntryType, LedgerEntryCategory } from '@/types/database';
@@ -55,9 +59,18 @@ export default function ClientsPage() {
   const [editingClient, setEditingClient] = useState<B2BClient | null>(null);
   const [selectedClient, setSelectedClient] = useState<B2BClient | null>(null);
 
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<{ action: 'eliminar' | 'desactivar' | 'activar'; count: number } | null>(null);
+
   useEffect(() => {
     loadClients();
   }, []);
+
+  // Clear selection when search changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search]);
 
   async function loadClients() {
     setLoading(true);
@@ -95,6 +108,74 @@ export default function ClientsPage() {
       c.tax_id?.includes(search)
   );
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(c => c.id)));
+    }
+  }
+
+  async function handleBulkAction(action: 'eliminar' | 'desactivar' | 'activar') {
+    const ids = Array.from(selectedIds);
+
+    if (isDemoMode()) {
+      if (action === 'eliminar') {
+        setClients(prev => prev.filter(c => !selectedIds.has(c.id)));
+      } else {
+        const newActive = action === 'activar';
+        setClients(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, is_active: newActive } : c));
+      }
+      setSelectedIds(new Set());
+      setBulkConfirm(null);
+      return;
+    }
+
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (action === 'eliminar') {
+      // Clean FK dependencies
+      await supabase.from('client_phones').delete().in('client_id', ids);
+      await supabase.from('inbox_items').update({ client_id: null }).in('client_id', ids);
+      await supabase.from('ledger_entries').update({ client_id: null } as any).in('client_id', ids);
+      const { error } = await supabase.from('b2b_clients').delete().in('id', ids);
+      if (error) {
+        console.error('Error deleting clients:', error);
+        alert(`Error al eliminar: ${error.message}`);
+        setBulkConfirm(null);
+        return;
+      }
+    } else {
+      const newActive = action === 'activar';
+      await supabase.from('b2b_clients').update({ is_active: newActive }).in('id', ids);
+    }
+
+    await supabase.from('audit_events').insert({
+      user_id: user?.id,
+      action: `bulk_client_${action}`,
+      entity_type: 'b2b_clients',
+      after_data: { client_ids: ids, count: ids.length },
+    });
+
+    setSelectedIds(new Set());
+    setBulkConfirm(null);
+    loadClients();
+  }
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < filtered.length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -117,16 +198,32 @@ export default function ClientsPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          type="text"
-          placeholder="Buscar por nombre, razon social, CUIT..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      {/* Search + Select All */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, razon social, CUIT..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        {filtered.length > 0 && (
+          <button
+            onClick={toggleSelectAll}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition',
+              allSelected || someSelected
+                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
+            )}
+          >
+            <CheckSquare className="w-4 h-4" />
+            {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+          </button>
+        )}
       </div>
 
       {/* Client Grid */}
@@ -144,65 +241,127 @@ export default function ClientsPage() {
           {filtered.map((client) => (
             <div
               key={client.id}
-              onClick={() => setSelectedClient(client)}
-              className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-slate-600 transition cursor-pointer"
+              className={cn(
+                'bg-slate-900/50 border rounded-xl p-5 hover:border-slate-600 transition cursor-pointer relative',
+                selectedIds.has(client.id) ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-800'
+              )}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-white font-semibold">{client.name}</h3>
-                  {client.business_name && (
-                    <p className="text-slate-500 text-xs">{client.business_name}</p>
+              {/* Checkbox */}
+              <div className="absolute top-3 left-3" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(client.id)}
+                  onChange={() => toggleSelect(client.id)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                />
+              </div>
+
+              <div onClick={() => setSelectedClient(client)} className="pl-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-white font-semibold">{client.name}</h3>
+                    {client.business_name && (
+                      <p className="text-slate-500 text-xs">{client.business_name}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingClient(client); setShowForm(true); }}
+                    className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {client.tax_id && (
+                  <p className="text-slate-400 text-xs mb-2">CUIT: {client.tax_id}</p>
+                )}
+
+                <div className="space-y-1 mb-3">
+                  {client.contact_email && (
+                    <p className="text-slate-400 text-xs flex items-center gap-1">
+                      <Mail className="w-3 h-3" />
+                      {client.contact_email}
+                    </p>
+                  )}
+                  {client.contact_phone && (
+                    <p className="text-slate-400 text-xs flex items-center gap-1">
+                      <Phone className="w-3 h-3" />
+                      {client.contact_phone}
+                    </p>
                   )}
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setEditingClient(client); setShowForm(true); }}
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              </div>
 
-              {client.tax_id && (
-                <p className="text-slate-400 text-xs mb-2">CUIT: {client.tax_id}</p>
-              )}
-
-              <div className="space-y-1 mb-3">
-                {client.contact_email && (
-                  <p className="text-slate-400 text-xs flex items-center gap-1">
-                    <Mail className="w-3 h-3" />
-                    {client.contact_email}
-                  </p>
-                )}
-                {client.contact_phone && (
-                  <p className="text-slate-400 text-xs flex items-center gap-1">
-                    <Phone className="w-3 h-3" />
-                    {client.contact_phone}
-                  </p>
-                )}
-              </div>
-
-              {phones[client.id] && phones[client.id].length > 0 && (
-                <div className="border-t border-slate-800 pt-3 mt-3">
-                  <p className="text-slate-500 text-xs mb-1.5">WhatsApp:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {phones[client.id].map((p) => (
-                      <span key={p.id} className="px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">
-                        {p.phone_number}
-                      </span>
-                    ))}
+                {phones[client.id] && phones[client.id].length > 0 && (
+                  <div className="border-t border-slate-800 pt-3 mt-3">
+                    <p className="text-slate-500 text-xs mb-1.5">WhatsApp:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {phones[client.id].map((p) => (
+                        <span key={p.id} className="px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">
+                          {p.phone_number}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="border-t border-slate-800 pt-3 mt-3 flex justify-between">
-                <span className={`text-xs px-2 py-0.5 rounded ${client.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {client.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-                <span className="text-xs text-slate-600">{formatDate(client.created_at)}</span>
+                <div className="border-t border-slate-800 pt-3 mt-3 flex justify-between">
+                  <span className={`text-xs px-2 py-0.5 rounded ${client.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {client.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                  <span className="text-xs text-slate-600">{formatDate(client.created_at)}</span>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-800 border border-slate-700 rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-4">
+          <span className="text-white text-sm font-medium">
+            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="w-px h-6 bg-slate-700" />
+          <button
+            onClick={() => setBulkConfirm({ action: 'activar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+          >
+            <ToggleRight className="w-4 h-4" />
+            Activar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'desactivar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition"
+          >
+            <ToggleLeft className="w-4 h-4" />
+            Desactivar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'eliminar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+          >
+            <Trash2 className="w-4 h-4" />
+            Eliminar
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Confirm Dialog */}
+      {bulkConfirm && (
+        <BulkConfirmDialog
+          action={bulkConfirm.action}
+          count={bulkConfirm.count}
+          entityLabel="clientes"
+          onConfirm={() => handleBulkAction(bulkConfirm.action)}
+          onCancel={() => setBulkConfirm(null)}
+        />
       )}
 
       {/* Client Detail Slide-Out */}
@@ -224,6 +383,42 @@ export default function ClientsPage() {
           onSave={() => { setShowForm(false); setEditingClient(null); loadClients(); }}
         />
       )}
+    </div>
+  );
+}
+
+function BulkConfirmDialog({
+  action, count, entityLabel, onConfirm, onCancel,
+}: {
+  action: string; count: number; entityLabel: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  const configs: Record<string, { title: string; color: string; icon: typeof Trash2; description: string }> = {
+    eliminar: { title: `Eliminar ${entityLabel}`, color: 'bg-red-600 hover:bg-red-700', icon: Trash2, description: `Se eliminaran ${count} ${entityLabel} de forma permanente. Los movimientos asociados quedaran sin cliente. Esta accion es irreversible.` },
+    desactivar: { title: `Desactivar ${entityLabel}`, color: 'bg-orange-600 hover:bg-orange-700', icon: ToggleLeft, description: `Se desactivaran ${count} ${entityLabel}. No se eliminan datos, solo se ocultan de las listas.` },
+    activar: { title: `Activar ${entityLabel}`, color: 'bg-green-600 hover:bg-green-700', icon: ToggleRight, description: `Se activaran ${count} ${entityLabel}.` },
+  };
+  const config = configs[action] || configs.eliminar;
+  const Icon = config.icon;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm m-4 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn('p-2 rounded-lg', action === 'eliminar' ? 'bg-red-500/10' : action === 'desactivar' ? 'bg-orange-500/10' : 'bg-green-500/10')}>
+            <Icon className={cn('w-5 h-5', action === 'eliminar' ? 'text-red-400' : action === 'desactivar' ? 'text-orange-400' : 'text-green-400')} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+        </div>
+        <p className="text-slate-400 text-sm mb-6">{config.description}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className={cn('flex-1 py-2 text-white text-sm font-medium rounded-lg transition', config.color)}>
+            Confirmar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

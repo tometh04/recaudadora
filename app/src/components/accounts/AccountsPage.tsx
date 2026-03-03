@@ -13,6 +13,10 @@ import {
   Upload,
   CheckCircle,
   FileSpreadsheet,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  CheckSquare,
 } from 'lucide-react';
 import { cn, formatDate, formatCurrency, STATUS_LABELS, STATUS_COLORS } from '@/lib/utils';
 import type { Account, AccountType, BankTransaction, InboxItem } from '@/types/database';
@@ -37,7 +41,16 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<{ action: 'eliminar' | 'desactivar' | 'activar'; count: number } | null>(null);
+
   useEffect(() => { loadAccounts(); }, []);
+
+  // Clear selection when search changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search]);
 
   async function loadAccounts() {
     setLoading(true);
@@ -56,6 +69,80 @@ export default function AccountsPage() {
     a.cbu?.includes(search)
   );
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(a => a.id)));
+    }
+  }
+
+  async function handleBulkAction(action: 'eliminar' | 'desactivar' | 'activar') {
+    const ids = Array.from(selectedIds);
+
+    if (isDemoMode()) {
+      if (action === 'eliminar') {
+        setAccounts(prev => prev.filter(a => !selectedIds.has(a.id)));
+      } else {
+        const newActive = action === 'activar';
+        setAccounts(prev => prev.map(a => selectedIds.has(a.id) ? { ...a, is_active: newActive } : a));
+      }
+      setSelectedIds(new Set());
+      setBulkConfirm(null);
+      return;
+    }
+
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (action === 'eliminar') {
+      // Clean FK dependencies
+      await supabase.from('inbox_items').update({ account_id: null }).in('account_id', ids);
+      // Get bank_transaction IDs first to clean reconciliations
+      const { data: txData } = await supabase.from('bank_transactions').select('id').in('account_id', ids);
+      const txIds = (txData || []).map((t: { id: string }) => t.id);
+      if (txIds.length > 0) {
+        await supabase.from('reconciliations').delete().in('bank_transaction_id', txIds);
+      }
+      await supabase.from('bank_transactions').delete().in('account_id', ids);
+      await supabase.from('statement_imports').delete().in('account_id', ids);
+      const { error } = await supabase.from('accounts').delete().in('id', ids);
+      if (error) {
+        console.error('Error deleting accounts:', error);
+        alert(`Error al eliminar: ${error.message}`);
+        setBulkConfirm(null);
+        return;
+      }
+    } else {
+      const newActive = action === 'activar';
+      await supabase.from('accounts').update({ is_active: newActive }).in('id', ids);
+    }
+
+    await supabase.from('audit_events').insert({
+      user_id: user?.id,
+      action: `bulk_account_${action}`,
+      entity_type: 'accounts',
+      after_data: { account_ids: ids, count: ids.length },
+    });
+
+    setSelectedIds(new Set());
+    setBulkConfirm(null);
+    loadAccounts();
+  }
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < filtered.length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -72,11 +159,27 @@ export default function AccountsPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input type="text" placeholder="Buscar por nombre, banco, CBU..." value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      {/* Search + Select All */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input type="text" placeholder="Buscar por nombre, banco, CBU..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        {filtered.length > 0 && (
+          <button
+            onClick={toggleSelectAll}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition',
+              allSelected || someSelected
+                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
+            )}
+          >
+            <CheckSquare className="w-4 h-4" />
+            {allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+          </button>
+        )}
       </div>
 
       {/* Grid */}
@@ -92,33 +195,98 @@ export default function AccountsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(account => (
-            <div key={account.id} onClick={() => setSelectedAccount(account)}
-              className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-slate-600 transition cursor-pointer">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-white font-semibold">{account.name}</h3>
-                  <span className={cn('inline-block px-2 py-0.5 rounded text-xs font-medium mt-1', ACCOUNT_TYPE_COLORS[account.account_type])}>
-                    {ACCOUNT_TYPE_LABELS[account.account_type]}
-                  </span>
-                </div>
-                <button onClick={e => { e.stopPropagation(); setEditingAccount(account); setShowForm(true); }}
-                  className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition">
-                  <Edit2 className="w-4 h-4" />
-                </button>
+            <div
+              key={account.id}
+              className={cn(
+                'bg-slate-900/50 border rounded-xl p-5 hover:border-slate-600 transition cursor-pointer relative',
+                selectedIds.has(account.id) ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-800'
+              )}
+            >
+              {/* Checkbox */}
+              <div className="absolute top-3 left-3" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(account.id)}
+                  onChange={() => toggleSelect(account.id)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                />
               </div>
-              {account.bank_name && <p className="text-slate-400 text-sm mb-1">{account.bank_name}</p>}
-              {account.cbu && <p className="text-slate-500 text-xs font-mono mb-1">CBU: {account.cbu}</p>}
-              {account.alias && <p className="text-slate-500 text-xs mb-1">Alias: {account.alias}</p>}
-              {account.notes && <p className="text-slate-600 text-xs mt-2">{account.notes}</p>}
-              <div className="border-t border-slate-800 pt-3 mt-3 flex justify-between">
-                <span className={`text-xs px-2 py-0.5 rounded ${account.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {account.is_active ? 'Activa' : 'Inactiva'}
-                </span>
-                <span className="text-xs text-slate-600">{formatDate(account.created_at)}</span>
+
+              <div onClick={() => setSelectedAccount(account)} className="pl-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-white font-semibold">{account.name}</h3>
+                    <span className={cn('inline-block px-2 py-0.5 rounded text-xs font-medium mt-1', ACCOUNT_TYPE_COLORS[account.account_type])}>
+                      {ACCOUNT_TYPE_LABELS[account.account_type]}
+                    </span>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); setEditingAccount(account); setShowForm(true); }}
+                    className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {account.bank_name && <p className="text-slate-400 text-sm mb-1">{account.bank_name}</p>}
+                {account.cbu && <p className="text-slate-500 text-xs font-mono mb-1">CBU: {account.cbu}</p>}
+                {account.alias && <p className="text-slate-500 text-xs mb-1">Alias: {account.alias}</p>}
+                {account.notes && <p className="text-slate-600 text-xs mt-2">{account.notes}</p>}
+                <div className="border-t border-slate-800 pt-3 mt-3 flex justify-between">
+                  <span className={`text-xs px-2 py-0.5 rounded ${account.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {account.is_active ? 'Activa' : 'Inactiva'}
+                  </span>
+                  <span className="text-xs text-slate-600">{formatDate(account.created_at)}</span>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-800 border border-slate-700 rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-4">
+          <span className="text-white text-sm font-medium">
+            {selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="w-px h-6 bg-slate-700" />
+          <button
+            onClick={() => setBulkConfirm({ action: 'activar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+          >
+            <ToggleRight className="w-4 h-4" />
+            Activar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'desactivar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition"
+          >
+            <ToggleLeft className="w-4 h-4" />
+            Desactivar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'eliminar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+          >
+            <Trash2 className="w-4 h-4" />
+            Eliminar
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Confirm Dialog */}
+      {bulkConfirm && (
+        <BulkConfirmDialog
+          action={bulkConfirm.action}
+          count={bulkConfirm.count}
+          entityLabel="cuentas"
+          onConfirm={() => handleBulkAction(bulkConfirm.action)}
+          onCancel={() => setBulkConfirm(null)}
+        />
       )}
 
       {/* Detail */}
@@ -138,6 +306,42 @@ export default function AccountsPage() {
           onSave={() => { setShowForm(false); setEditingAccount(null); loadAccounts(); }}
         />
       )}
+    </div>
+  );
+}
+
+function BulkConfirmDialog({
+  action, count, entityLabel, onConfirm, onCancel,
+}: {
+  action: string; count: number; entityLabel: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  const configs: Record<string, { title: string; color: string; icon: typeof Trash2; description: string }> = {
+    eliminar: { title: `Eliminar ${entityLabel}`, color: 'bg-red-600 hover:bg-red-700', icon: Trash2, description: `Se eliminaran ${count} ${entityLabel} y todos sus movimientos bancarios asociados. Esta accion es irreversible.` },
+    desactivar: { title: `Desactivar ${entityLabel}`, color: 'bg-orange-600 hover:bg-orange-700', icon: ToggleLeft, description: `Se desactivaran ${count} ${entityLabel}. No se eliminan datos, solo se ocultan de las listas.` },
+    activar: { title: `Activar ${entityLabel}`, color: 'bg-green-600 hover:bg-green-700', icon: ToggleRight, description: `Se activaran ${count} ${entityLabel}.` },
+  };
+  const config = configs[action] || configs.eliminar;
+  const Icon = config.icon;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm m-4 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn('p-2 rounded-lg', action === 'eliminar' ? 'bg-red-500/10' : action === 'desactivar' ? 'bg-orange-500/10' : 'bg-green-500/10')}>
+            <Icon className={cn('w-5 h-5', action === 'eliminar' ? 'text-red-400' : action === 'desactivar' ? 'text-orange-400' : 'text-green-400')} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+        </div>
+        <p className="text-slate-400 text-sm mb-6">{config.description}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className={cn('flex-1 py-2 text-white text-sm font-medium rounded-lg transition', config.color)}>
+            Confirmar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,25 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install dependencies
+RUN npm ci --production=false
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+# Build TypeScript
+RUN npx tsc
+
+# Create directories for runtime data
+RUN mkdir -p auth_sessions media
+
+# Expose port
+EXPOSE 3001
+
+# Start server
+CMD ["node", "dist/index.js"]

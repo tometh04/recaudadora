@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Baileys auth sessions & media
+whatsapp-server/auth_sessions/
+whatsapp-server/media/
+whatsapp-server/dist/
+
+# Next.js
+app/.next/
+app/out/
+app/build/
+
+# Misc
+*.pem
+*.log

@@ -2,22 +2,25 @@
  * inbox-ingest.ts
  *
  * Bridges WhatsApp messages from Baileys → Supabase inbox_items.
- * When an image arrives:
+ * When an image/document arrives:
  *   1. Upload to Supabase Storage ("comprobantes" bucket)
- *   2. Look up sender phone → client mapping
- *   3. Create inbox_item with status "ocr_procesando"
- *   4. Run OCR with OpenAI Vision
- *   5. Update inbox_item with extracted data → status "ocr_listo"
- *   6. Create ocr_results record
+ *   2. For PDFs: convert first page to JPEG for OCR
+ *   3. Look up sender phone → client mapping
+ *   4. Create inbox_item with status "ocr_procesando"
+ *   5. Run OCR with OpenAI Vision
+ *   6. Auto-match bank_name → account in accounts table
+ *   7. Update inbox_item with extracted data → status "ocr_listo"
+ *   8. Create ocr_results record
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync, unlinkSync } from 'fs';
+import { join, basename } from 'path';
 import { randomUUID } from 'crypto';
 
 import { config } from './config.js';
 import { getSupabase, isSupabaseConfigured } from './supabase.js';
 import { processOcr, confidenceLabel } from './ocr.js';
+import { convertPdfToJpeg, fileToBase64DataUrl } from './pdf-to-image.js';
 import type { WhatsAppMessage } from './types.js';
 
 export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string | null): Promise<void> {
@@ -35,9 +38,6 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
   if (msg.remoteJid.endsWith('@g.us') && !config.INGEST_GROUPS) {
     return;
   }
-
-  // Skip messages we sent (fromMe) — unless it's an image we forwarded to ourselves
-  // Actually, keep fromMe images too since Andrés might forward comprobantes to himself
 
   if (!localMediaPath) {
     console.warn(`[Ingest] No media file for message ${msg.id}, skipping`);
@@ -60,7 +60,7 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
       return;
     }
 
-    // 2. Upload image to Supabase Storage
+    // 2. Upload original file to Supabase Storage
     const fullPath = join(config.MEDIA_DIR, localMediaPath.replace('/media/', ''));
     const fileBuffer = readFileSync(fullPath);
 
@@ -85,41 +85,45 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
 
     console.log(`[Ingest] Uploaded to Supabase Storage: ${storagePath}`);
 
-    // 3. Look up sender phone → client
-    const cleanPhone = msg.phoneNumber.replace(/\D/g, '');
-    const { data: phoneMapping } = await supabase
-      .from('client_phones')
-      .select('client_id')
-      .eq('phone_number', cleanPhone)
-      .eq('is_active', true)
-      .maybeSingle();
+    // 2b. For PDFs: convert first page to JPEG and upload that too
+    let ocrImageUrl = publicUrl;
+    const isPdf = (msg.mimeType || '').includes('pdf') || ext === 'pdf';
 
-    // Try with different phone formats (with/without country code prefix)
-    let clientId = phoneMapping?.client_id || null;
-    if (!clientId) {
-      // Try without leading country code (54 for Argentina)
-      const altPhones = [
-        cleanPhone,
-        cleanPhone.replace(/^549/, ''),    // Remove 549 prefix
-        cleanPhone.replace(/^54/, ''),     // Remove 54 prefix
-        `549${cleanPhone}`,               // Add 549 prefix
-        `54${cleanPhone}`,                // Add 54 prefix
-      ];
+    if (isPdf) {
+      console.log(`[Ingest] PDF detected, converting first page to image...`);
+      const jpegPath = convertPdfToJpeg(fullPath);
 
-      for (const altPhone of altPhones) {
-        const { data: altMapping } = await supabase
-          .from('client_phones')
-          .select('client_id')
-          .eq('phone_number', altPhone)
-          .eq('is_active', true)
-          .maybeSingle();
+      if (jpegPath && existsSync(jpegPath)) {
+        const jpegBuffer = readFileSync(jpegPath);
+        const jpegStoragePath = storagePath.replace(`.${ext}`, '_page1.jpg');
 
-        if (altMapping?.client_id) {
-          clientId = altMapping.client_id;
-          break;
+        const { error: jpegUploadError } = await supabase.storage
+          .from('comprobantes')
+          .upload(jpegStoragePath, jpegBuffer, {
+            contentType: 'image/jpeg',
+            upsert: false,
+          });
+
+        if (!jpegUploadError) {
+          const { data: { publicUrl: jpegPublicUrl } } = supabase.storage
+            .from('comprobantes')
+            .getPublicUrl(jpegStoragePath);
+          ocrImageUrl = jpegPublicUrl;
+          console.log(`[Ingest] PDF page 1 uploaded: ${jpegStoragePath}`);
         }
+
+        // Clean up temp JPEG file
+        try { unlinkSync(jpegPath); } catch {}
+      } else {
+        // Fallback: send the PDF as base64 data URL (won't work with OpenAI Vision,
+        // but at least the inbox_item gets created)
+        console.warn(`[Ingest] PDF conversion failed, OCR may not work`);
       }
     }
+
+    // 3. Look up sender phone → client
+    const cleanPhone = msg.phoneNumber.replace(/\D/g, '');
+    let clientId = await findClientByPhone(cleanPhone);
 
     // 4. Create inbox_item with "ocr_procesando" status
     const { data: inboxItem, error: insertError } = await supabase
@@ -145,14 +149,109 @@ export async function ingestToInbox(msg: WhatsAppMessage, localMediaPath: string
     const inboxItemId = inboxItem.id;
     console.log(`[Ingest] Created inbox_item ${inboxItemId} for message ${msg.id}`);
 
-    // 5. Run OCR (async, don't block message processing)
-    runOcrInBackground(inboxItemId, publicUrl).catch((err) =>
+    // 5. Run OCR in background (non-blocking)
+    runOcrInBackground(inboxItemId, ocrImageUrl).catch((err) =>
       console.error(`[Ingest] Background OCR error:`, err)
     );
 
   } catch (err) {
     console.error(`[Ingest] Error processing message ${msg.id}:`, err);
   }
+}
+
+/** Look up client by phone number, trying multiple formats */
+async function findClientByPhone(cleanPhone: string): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  // Try multiple phone formats (Argentine numbers)
+  const phonesToTry = [
+    cleanPhone,
+    cleanPhone.replace(/^549/, ''),
+    cleanPhone.replace(/^54/, ''),
+    `549${cleanPhone}`,
+    `54${cleanPhone}`,
+  ];
+
+  for (const phone of phonesToTry) {
+    const { data } = await supabase
+      .from('client_phones')
+      .select('client_id')
+      .eq('phone_number', phone)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (data?.client_id) return data.client_id;
+  }
+
+  return null;
+}
+
+/** Try to match OCR bank_name to an account in the accounts table */
+async function matchAccount(bankName: string | null): Promise<string | null> {
+  if (!bankName) return null;
+
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data: accounts } = await supabase
+    .from('accounts')
+    .select('id, name, bank_name')
+    .eq('is_active', true);
+
+  if (!accounts || accounts.length === 0) return null;
+
+  const normalizedBank = bankName.toLowerCase().trim();
+
+  // Exact or partial match on name or bank_name
+  for (const account of accounts) {
+    const accName = (account.name || '').toLowerCase();
+    const accBank = (account.bank_name || '').toLowerCase();
+
+    if (
+      accName.includes(normalizedBank) ||
+      accBank.includes(normalizedBank) ||
+      normalizedBank.includes(accName) ||
+      normalizedBank.includes(accBank)
+    ) {
+      console.log(`[Ingest] Matched bank "${bankName}" → account "${account.name}" (${account.id})`);
+      return account.id;
+    }
+  }
+
+  // Common aliases
+  const aliases: Record<string, string[]> = {
+    'mercado pago': ['mercadopago', 'mp', 'mercado libre'],
+    'banco macro': ['macro'],
+    'banco credicoop': ['credicoop'],
+    'banco nacion': ['nacion', 'bna'],
+    'banco provincia': ['provincia', 'bapro'],
+    'banco galicia': ['galicia'],
+    'banco santander': ['santander'],
+    'banco bbva': ['bbva', 'frances'],
+    'banco hsbc': ['hsbc'],
+    'brubank': ['brubank'],
+    'uala': ['ualá', 'uala'],
+    'naranja x': ['naranja'],
+  };
+
+  for (const account of accounts) {
+    const accName = (account.name || '').toLowerCase();
+    const accBank = (account.bank_name || '').toLowerCase();
+
+    for (const [key, alts] of Object.entries(aliases)) {
+      const bankMatches = normalizedBank.includes(key) || alts.some(a => normalizedBank.includes(a));
+      const accMatches = accName.includes(key) || accBank.includes(key) ||
+        alts.some(a => accName.includes(a) || accBank.includes(a));
+
+      if (bankMatches && accMatches) {
+        console.log(`[Ingest] Matched bank "${bankName}" → account "${account.name}" via alias`);
+        return account.id;
+      }
+    }
+  }
+
+  return null;
 }
 
 async function runOcrInBackground(inboxItemId: string, imageUrl: string): Promise<void> {
@@ -173,21 +272,30 @@ async function runOcrInBackground(inboxItemId: string, imageUrl: string): Promis
 
   const processingTimeMs = Date.now() - startTime;
 
-  // 6. Update inbox_item with OCR results
+  // Auto-match account by bank name
+  const accountId = await matchAccount(ocr.bank_name);
+
+  // Update inbox_item with OCR results + auto-matched account
+  const updatePayload: Record<string, any> = {
+    status: 'ocr_listo',
+    amount: ocr.amount,
+    transaction_date: ocr.date,
+    reference_number: ocr.reference,
+    ocr_amount_confidence: confidenceLabel(ocr.amount_confidence),
+    ocr_date_confidence: confidenceLabel(ocr.date_confidence),
+    ocr_reference_confidence: confidenceLabel(ocr.reference_confidence),
+  };
+
+  if (accountId) {
+    updatePayload.account_id = accountId;
+  }
+
   await supabase
     .from('inbox_items')
-    .update({
-      status: 'ocr_listo',
-      amount: ocr.amount,
-      transaction_date: ocr.date,
-      reference_number: ocr.reference,
-      ocr_amount_confidence: confidenceLabel(ocr.amount_confidence),
-      ocr_date_confidence: confidenceLabel(ocr.date_confidence),
-      ocr_reference_confidence: confidenceLabel(ocr.reference_confidence),
-    })
+    .update(updatePayload)
     .eq('id', inboxItemId);
 
-  // 7. Create ocr_results record
+  // Create ocr_results record
   await supabase
     .from('ocr_results')
     .insert({
@@ -207,12 +315,16 @@ async function runOcrInBackground(inboxItemId: string, imageUrl: string): Promis
         reference: ocr.reference,
         bank_name: ocr.bank_name,
         account_number: ocr.account_number,
+        sender_name: ocr.sender_name,
+        sender_cuit: ocr.sender_cuit,
+        receiver_name: ocr.receiver_name,
+        receiver_cuit: ocr.receiver_cuit,
         description: ocr.description,
       },
     });
 
   console.log(
     `[Ingest] OCR complete for ${inboxItemId}: ` +
-    `$${ocr.amount} | ${ocr.date} | ref:${ocr.reference} | ${processingTimeMs}ms`
+    `$${ocr.amount} | ${ocr.date} | ref:${ocr.reference} | bank:${ocr.bank_name} | acct:${accountId || 'none'} | ${processingTimeMs}ms`
   );
 }

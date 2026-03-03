@@ -1,5 +1,8 @@
 FROM node:22-slim
 
+# Install poppler-utils for PDF to image conversion (pdftoppm)
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy package files

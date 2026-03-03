@@ -7,6 +7,9 @@ interface AppStore {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  // Badge count for Comprobantes sidebar item
+  inboxUnprocessedCount: number;
+  setInboxUnprocessedCount: (count: number) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -15,4 +18,6 @@ export const useAppStore = create<AppStore>((set) => ({
   sidebarOpen: true,
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  inboxUnprocessedCount: 0,
+  setInboxUnprocessedCount: (inboxUnprocessedCount) => set({ inboxUnprocessedCount }),
 }));

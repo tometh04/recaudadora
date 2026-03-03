@@ -35,3 +35,12 @@ export interface MessageQuery {
   limit?: number;
   offset?: number;
 }
+
+export interface Conversation {
+  remoteJid: string;
+  phoneNumber: string;
+  pushName: string | null;
+  lastMessage: WhatsAppMessage;
+  messages: WhatsAppMessage[];
+  unreadCount: number;
+}

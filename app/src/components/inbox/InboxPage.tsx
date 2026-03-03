@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { isDemoMode } from '@/lib/use-demo';
 import { DEMO_INBOX, DEMO_CLIENTS, DEMO_ACCOUNTS } from '@/lib/demo-data';
 import {
-  Inbox,
+  FileCheck,
   Search,
   Upload,
   Eye,
@@ -164,8 +164,8 @@ export default function InboxPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Inbox className="w-6 h-6 text-blue-400" />
-            Inbox de Comprobantes
+            <FileCheck className="w-6 h-6 text-blue-400" />
+            Comprobantes
           </h1>
           <p className="text-slate-400 mt-1">
             {items.length} comprobantes totales

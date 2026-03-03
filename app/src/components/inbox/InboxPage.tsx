@@ -16,6 +16,7 @@ import {
   ImageIcon,
   User,
   Building2,
+  Trash2,
 } from 'lucide-react';
 import {
   cn,
@@ -36,6 +37,8 @@ export default function InboxPage() {
   const [statusFilter, setStatusFilter] = useState<InboxStatus | 'todos'>('todos');
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<{ action: 'verificar' | 'rechazar' | 'eliminar'; count: number } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -69,6 +72,11 @@ export default function InboxPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, search]);
 
   async function updateItem(id: string, updates: Partial<InboxItem>) {
     if (isDemoMode()) {
@@ -166,13 +174,11 @@ export default function InboxPage() {
         .update({ status: 'pendiente_verificacion' })
         .eq('id', item.id);
 
-      // Update local state
       setItems(prev => prev.map(i =>
         i.id === item.id ? { ...i, status: 'pendiente_verificacion' as InboxStatus } : i
       ));
       setSelectedItem({ ...item, status: 'pendiente_verificacion' as InboxStatus });
 
-      // Refresh badge count
       const { count } = await supabase
         .from('inbox_items')
         .select('id', { count: 'exact', head: true })
@@ -183,6 +189,75 @@ export default function InboxPage() {
     }
   }, []);
 
+  // Bulk actions
+  async function handleBulkAction(action: 'verificar' | 'rechazar' | 'eliminar') {
+    const ids = Array.from(selectedIds);
+
+    if (isDemoMode()) {
+      if (action === 'eliminar') {
+        setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
+      } else {
+        const newStatus = action === 'verificar' ? 'verificado' : 'rechazado';
+        setItems(prev => prev.map(i =>
+          selectedIds.has(i.id) ? { ...i, status: newStatus as InboxStatus } : i
+        ));
+      }
+      setSelectedIds(new Set());
+      setBulkConfirm(null);
+      return;
+    }
+
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (action === 'eliminar') {
+      // Delete related ocr_results first to avoid FK issues
+      await supabase.from('ocr_results').delete().in('inbox_item_id', ids);
+      await supabase.from('inbox_items').delete().in('id', ids);
+    } else {
+      const newStatus = action === 'verificar' ? 'verificado' : 'rechazado';
+      await supabase.from('inbox_items').update({ status: newStatus }).in('id', ids);
+    }
+
+    await supabase.from('audit_events').insert({
+      user_id: user?.id,
+      action: `bulk_${action}`,
+      entity_type: 'inbox_items',
+      after_data: { item_ids: ids, count: ids.length },
+    });
+
+    setSelectedIds(new Set());
+    setBulkConfirm(null);
+    loadData();
+
+    // Refresh badge
+    const { count } = await supabase
+      .from('inbox_items')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['recibido', 'ocr_procesando', 'ocr_listo']);
+    if (count !== null) {
+      useAppStore.getState().setInboxUnprocessedCount(count);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(i => i.id)));
+    }
+  }
+
   const statusCounts = items.reduce(
     (acc, item) => {
       acc[item.status] = (acc[item.status] || 0) + 1;
@@ -190,6 +265,9 @@ export default function InboxPage() {
     },
     {} as Record<string, number>
   );
+
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < filtered.length;
 
   return (
     <div className="space-y-6">
@@ -251,7 +329,7 @@ export default function InboxPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
         <input
           type="text"
-          placeholder="Buscar por cliente, teléfono, referencia, monto..."
+          placeholder="Buscar por cliente, telefono, referencia, monto..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -264,6 +342,15 @@ export default function InboxPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
+                <th className="p-4 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                  />
+                </th>
                 <th className="text-left p-4 text-slate-400 font-medium">
                   Comprobante
                 </th>
@@ -293,7 +380,7 @@ export default function InboxPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={9} className="p-8 text-center text-slate-500">
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                       Cargando...
@@ -302,7 +389,7 @@ export default function InboxPage() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={9} className="p-8 text-center text-slate-500">
                     No hay comprobantes
                   </td>
                 </tr>
@@ -310,9 +397,20 @@ export default function InboxPage() {
                 filtered.map((item) => (
                   <tr
                     key={item.id}
-                    className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer transition"
+                    className={cn(
+                      'border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer transition',
+                      selectedIds.has(item.id) && 'bg-blue-900/10'
+                    )}
                     onClick={() => handleSelectItem(item)}
                   >
+                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                      />
+                    </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center shrink-0">
@@ -425,6 +523,53 @@ export default function InboxPage() {
         </div>
       </div>
 
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-800 border border-slate-700 rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-4">
+          <span className="text-white text-sm font-medium">
+            {selectedIds.size} seleccionados
+          </span>
+          <div className="w-px h-6 bg-slate-700" />
+          <button
+            onClick={() => setBulkConfirm({ action: 'verificar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+          >
+            <CheckCircle className="w-4 h-4" />
+            Verificar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'rechazar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition"
+          >
+            <XCircle className="w-4 h-4" />
+            Rechazar
+          </button>
+          <button
+            onClick={() => setBulkConfirm({ action: 'eliminar', count: selectedIds.size })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+          >
+            <Trash2 className="w-4 h-4" />
+            Eliminar
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Confirm Dialog */}
+      {bulkConfirm && (
+        <BulkConfirmDialog
+          action={bulkConfirm.action}
+          count={bulkConfirm.count}
+          onConfirm={() => handleBulkAction(bulkConfirm.action)}
+          onCancel={() => setBulkConfirm(null)}
+        />
+      )}
+
       {/* Detail Modal */}
       {selectedItem && (
         <ItemDetailModal
@@ -450,6 +595,54 @@ export default function InboxPage() {
   );
 }
 
+function BulkConfirmDialog({
+  action,
+  count,
+  onConfirm,
+  onCancel,
+}: {
+  action: 'verificar' | 'rechazar' | 'eliminar';
+  count: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const config = {
+    verificar: { title: 'Verificar comprobantes', color: 'bg-green-600 hover:bg-green-700', icon: CheckCircle, description: `Se marcaran ${count} comprobantes como verificados.` },
+    rechazar: { title: 'Rechazar comprobantes', color: 'bg-orange-600 hover:bg-orange-700', icon: XCircle, description: `Se marcaran ${count} comprobantes como rechazados.` },
+    eliminar: { title: 'Eliminar comprobantes', color: 'bg-red-600 hover:bg-red-700', icon: Trash2, description: `Se eliminaran ${count} comprobantes de forma permanente. Esta accion es irreversible.` },
+  }[action];
+
+  const Icon = config.icon;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm m-4 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn('p-2 rounded-lg', action === 'eliminar' ? 'bg-red-500/10' : action === 'rechazar' ? 'bg-orange-500/10' : 'bg-green-500/10')}>
+            <Icon className={cn('w-5 h-5', action === 'eliminar' ? 'text-red-400' : action === 'rechazar' ? 'text-orange-400' : 'text-green-400')} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+        </div>
+        <p className="text-slate-400 text-sm mb-6">{config.description}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className={cn('flex-1 py-2 text-white text-sm font-medium rounded-lg transition', config.color)}
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ItemDetailModal({
   item,
   clients,
@@ -470,7 +663,6 @@ function ItemDetailModal({
   const [reference, setReference] = useState(item.reference_number || '');
   const [ocrData, setOcrData] = useState<Record<string, any> | null>(null);
 
-  // Load OCR extracted data (sender, receiver, bank)
   useEffect(() => {
     if (isDemoMode()) return;
     (async () => {
@@ -492,7 +684,6 @@ function ItemDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <div>
             <h2 className="text-lg font-semibold text-white">
@@ -532,9 +723,7 @@ function ItemDetailModal({
               {item.wa_phone_number && (
                 <p className="text-xs text-slate-500">
                   Telefono:{' '}
-                  <span className="text-slate-300">
-                    {item.wa_phone_number}
-                  </span>
+                  <span className="text-slate-300">{item.wa_phone_number}</span>
                 </p>
               )}
               <p className="text-xs text-slate-500">
@@ -545,7 +734,6 @@ function ItemDetailModal({
               </p>
             </div>
 
-            {/* OCR Extracted Info */}
             {ocrData && (
               <div className="mt-4 space-y-2">
                 {(ocrData.sender_name || ocrData.sender_cuit) && (
@@ -554,12 +742,8 @@ function ItemDetailModal({
                       <User className="w-3.5 h-3.5 text-blue-400" />
                       <span className="text-xs font-medium text-blue-400">Emisor (OCR)</span>
                     </div>
-                    {ocrData.sender_name && (
-                      <p className="text-sm text-white">{ocrData.sender_name}</p>
-                    )}
-                    {ocrData.sender_cuit && (
-                      <p className="text-xs text-slate-400">CUIT: {ocrData.sender_cuit}</p>
-                    )}
+                    {ocrData.sender_name && <p className="text-sm text-white">{ocrData.sender_name}</p>}
+                    {ocrData.sender_cuit && <p className="text-xs text-slate-400">CUIT: {ocrData.sender_cuit}</p>}
                   </div>
                 )}
                 {(ocrData.receiver_name || ocrData.receiver_cuit) && (
@@ -568,12 +752,8 @@ function ItemDetailModal({
                       <Building2 className="w-3.5 h-3.5 text-green-400" />
                       <span className="text-xs font-medium text-green-400">Receptor (OCR)</span>
                     </div>
-                    {ocrData.receiver_name && (
-                      <p className="text-sm text-white">{ocrData.receiver_name}</p>
-                    )}
-                    {ocrData.receiver_cuit && (
-                      <p className="text-xs text-slate-400">CUIT: {ocrData.receiver_cuit}</p>
-                    )}
+                    {ocrData.receiver_name && <p className="text-sm text-white">{ocrData.receiver_name}</p>}
+                    {ocrData.receiver_cuit && <p className="text-xs text-slate-400">CUIT: {ocrData.receiver_cuit}</p>}
                   </div>
                 )}
                 {ocrData.bank_name && (
@@ -583,9 +763,7 @@ function ItemDetailModal({
                       <span className="text-xs font-medium text-yellow-400">Entidad (OCR)</span>
                     </div>
                     <p className="text-sm text-white">{ocrData.bank_name}</p>
-                    {ocrData.account_number && (
-                      <p className="text-xs text-slate-400">Cuenta: {ocrData.account_number}</p>
-                    )}
+                    {ocrData.account_number && <p className="text-xs text-slate-400">Cuenta: {ocrData.account_number}</p>}
                   </div>
                 )}
                 {ocrData.description && (
@@ -598,20 +776,13 @@ function ItemDetailModal({
           {/* Form */}
           <div className="space-y-4">
             <div>
-              <span
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium',
-                  STATUS_COLORS[item.status]
-                )}
-              >
+              <span className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', STATUS_COLORS[item.status])}>
                 {STATUS_LABELS[item.status]}
               </span>
             </div>
 
             <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Cliente
-              </label>
+              <label className="block text-sm text-slate-400 mb-1">Cliente</label>
               <select
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
@@ -619,22 +790,16 @@ function ItemDetailModal({
               >
                 <option value="">Sin asignar</option>
                 {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
               {!clientId && ocrData?.sender_name && (
-                <p className="text-xs text-blue-400 mt-1">
-                  OCR detecta: {ocrData.sender_name}
-                </p>
+                <p className="text-xs text-blue-400 mt-1">OCR detecta: {ocrData.sender_name}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Cuenta / Canal
-              </label>
+              <label className="block text-sm text-slate-400 mb-1">Cuenta / Canal</label>
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
@@ -642,23 +807,17 @@ function ItemDetailModal({
               >
                 <option value="">Sin asignar</option>
                 {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
+                  <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
               {!accountId && ocrData?.bank_name && (
-                <p className="text-xs text-yellow-400 mt-1">
-                  OCR detecta: {ocrData.bank_name}
-                </p>
+                <p className="text-xs text-yellow-400 mt-1">OCR detecta: {ocrData.bank_name}</p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-slate-400 mb-1">
-                  Monto
-                </label>
+                <label className="block text-sm text-slate-400 mb-1">Monto</label>
                 <input
                   type="number"
                   value={amount}
@@ -667,15 +826,11 @@ function ItemDetailModal({
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 {item.ocr_amount_confidence && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    OCR: {item.ocr_amount_confidence}
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">OCR: {item.ocr_amount_confidence}</p>
                 )}
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">
-                  Fecha Tx
-                </label>
+                <label className="block text-sm text-slate-400 mb-1">Fecha Tx</label>
                 <input
                   type="date"
                   value={txDate}
@@ -686,9 +841,7 @@ function ItemDetailModal({
             </div>
 
             <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Referencia
-              </label>
+              <label className="block text-sm text-slate-400 mb-1">Referencia</label>
               <input
                 type="text"
                 value={reference}
@@ -698,7 +851,6 @@ function ItemDetailModal({
               />
             </div>
 
-            {/* Actions */}
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() =>
@@ -784,14 +936,14 @@ function UploadModal({
         >
           <Upload className="w-10 h-10 text-slate-500 mx-auto mb-3" />
           <p className="text-slate-300 text-sm mb-1">
-            Arrastrá la imagen acá
+            Arrastra la imagen aca
           </p>
           <p className="text-slate-500 text-xs">o</p>
           <label className="mt-3 inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg cursor-pointer transition">
             Seleccionar archivo
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

@@ -8,11 +8,25 @@ import { messagesRouter } from './routes/messages.js';
 
 const app = express();
 
-// Middleware
+// Middleware — CORS that handles trailing slashes and multiple origins
+const allowedOrigins = config.CORS_ORIGIN
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''));
+
 app.use(cors({
-  origin: config.CORS_ORIGIN,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, mobile apps, etc.)
+    if (!origin) return callback(null, true);
+    const clean = origin.replace(/\/+$/, '');
+    if (allowedOrigins.includes(clean) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    console.warn(`CORS blocked origin: ${origin}`);
+    return callback(null, false);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 app.use(express.json());
 

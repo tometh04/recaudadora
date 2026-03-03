@@ -212,9 +212,18 @@ export default function InboxPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (action === 'eliminar') {
-      // Delete related ocr_results first to avoid FK issues
+      // Delete/nullify all FK dependencies before deleting inbox_items
       await supabase.from('ocr_results').delete().in('inbox_item_id', ids);
-      await supabase.from('inbox_items').delete().in('id', ids);
+      await supabase.from('reconciliations').delete().in('inbox_item_id', ids);
+      await supabase.from('ledger_entries').update({ inbox_item_id: null }).in('inbox_item_id', ids);
+      await supabase.from('exceptions').delete().in('inbox_item_id', ids);
+      const { error } = await supabase.from('inbox_items').delete().in('id', ids);
+      if (error) {
+        console.error('Error deleting inbox_items:', error);
+        alert(`Error al eliminar: ${error.message}`);
+        setBulkConfirm(null);
+        return;
+      }
     } else {
       const newStatus = action === 'verificar' ? 'verificado' : 'rechazado';
       await supabase.from('inbox_items').update({ status: newStatus }).in('id', ids);

@@ -17,6 +17,7 @@ import { join, extname } from 'path';
 import { randomUUID } from 'crypto';
 
 import { config } from './config.js';
+import { ingestToInbox } from './inbox-ingest.js';
 import type { SessionInfo, SessionStatus, WhatsAppMessage, MessageType, MessageQuery } from './types.js';
 
 const logger = pino({ level: 'silent' });
@@ -278,6 +279,11 @@ export class SessionManager {
     }
 
     console.log(`[${sessionId}] Message from ${phoneNumber}: ${messageType} ${textContent?.slice(0, 50) || ''}`);
+
+    // Ingest images/documents to Supabase inbox (async, non-blocking)
+    ingestToInbox(waMessage, mediaUrl).catch((err) =>
+      console.error(`[${sessionId}] Inbox ingest error:`, err)
+    );
   }
 
   private getExtFromMime(mime: string): string {

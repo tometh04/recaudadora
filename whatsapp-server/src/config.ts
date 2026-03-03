@@ -31,4 +31,14 @@ export const config = {
   MAX_MESSAGES: parseInt(process.env.MAX_MESSAGES || '10000', 10),
   AUTH_DIR: join(rootDir, process.env.AUTH_DIR || 'auth_sessions'),
   MEDIA_DIR: join(rootDir, process.env.MEDIA_DIR || 'media'),
+
+  // Supabase — for creating inbox_items
+  SUPABASE_URL: process.env.SUPABASE_URL || '',
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+
+  // OpenAI — for OCR on receipt images
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+
+  // Only ingest images from direct chats (not groups)
+  INGEST_GROUPS: process.env.INGEST_GROUPS === 'true',
 };

@@ -12,7 +12,8 @@ export function sessionsRouter(manager: SessionManager): Router {
 
   // GET /:id - Get single session
   router.get('/:id', (req: Request, res: Response) => {
-    const session = manager.getSession(req.params.id);
+    const id = req.params.id as string;
+    const session = manager.getSession(id);
     if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
@@ -29,7 +30,6 @@ export function sessionsRouter(manager: SessionManager): Router {
       return;
     }
 
-    // Validate ID format (alphanumeric + hyphens + underscores)
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
       res.status(400).json({ error: 'ID must only contain letters, numbers, hyphens, and underscores' });
       return;
@@ -46,14 +46,15 @@ export function sessionsRouter(manager: SessionManager): Router {
 
   // DELETE /:id - Delete session
   router.delete('/:id', async (req: Request, res: Response) => {
-    const session = manager.getSession(req.params.id);
+    const id = req.params.id as string;
+    const session = manager.getSession(id);
     if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
 
     try {
-      await manager.deleteSession(req.params.id);
+      await manager.deleteSession(id);
       res.json({ ok: true });
     } catch (err: any) {
       console.error('Delete session error:', err);
@@ -63,8 +64,9 @@ export function sessionsRouter(manager: SessionManager): Router {
 
   // POST /:id/restart - Restart session
   router.post('/:id/restart', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
     try {
-      const session = await manager.restartSession(req.params.id);
+      const session = await manager.restartSession(id);
       if (!session) {
         res.status(404).json({ error: 'Session not found' });
         return;

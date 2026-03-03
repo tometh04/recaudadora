@@ -20,7 +20,8 @@ export function messagesRouter(manager: SessionManager): Router {
 
   // GET /:id - Get single message
   router.get('/:id', (req: Request, res: Response) => {
-    const message = manager.getMessage(req.params.id);
+    const id = req.params.id as string;
+    const message = manager.getMessage(id);
     if (!message) {
       res.status(404).json({ error: 'Message not found' });
       return;

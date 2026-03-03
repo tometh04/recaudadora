@@ -1,4 +1,3 @@
-import { config as dotenvConfig } from 'dotenv' with { type: 'json' };
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, existsSync } from 'fs';
@@ -7,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
-// Load .env manually
+// Load .env manually (no external dependency needed)
 const envPath = join(rootDir, '.env');
 if (existsSync(envPath)) {
   const envContent = readFileSync(envPath, 'utf-8');

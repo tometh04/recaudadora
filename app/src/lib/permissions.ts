@@ -79,7 +79,8 @@ export function usePermission(resource: string): boolean {
  * Check if a role can see a sidebar item
  */
 export function canAccessRoute(role: UserRole | undefined | null, href: string): boolean {
-  if (!role) return false;
+  // If no role yet (profile loading or not set), show all items
+  if (!role) return true;
   if (role === 'superadmin') return true;
   const allowed = SIDEBAR_PERMISSIONS[href];
   if (!allowed) return true; // default allow

@@ -5,6 +5,10 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   LayoutDashboard,
   FileCheck,
@@ -20,6 +24,7 @@ import {
   CalendarCheck,
   Settings,
   AlertOctagon,
+  Search,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -47,7 +52,6 @@ export default function Sidebar() {
   const supabase = createClient();
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Poll unprocessed inbox count every 30s
   useEffect(() => {
     if (isDemoMode()) return;
 
@@ -80,55 +84,83 @@ export default function Sidebar() {
     router.refresh();
   }
 
+  const filteredNav = navigation.filter((item) => canAccessRoute(profile?.role, item.href));
+
   return (
     <aside
       className={cn(
-        'flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 h-screen sticky top-0',
+        'flex flex-col bg-card border-r border-border transition-all duration-300 h-screen sticky top-0',
         sidebarOpen ? 'w-64' : 'w-16'
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-16 border-b border-slate-800">
+      <div className="flex items-center justify-between px-4 h-16 border-b border-border">
         {sidebarOpen && (
-          <span className="font-bold text-white text-lg tracking-tight">
-            Gestion
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-sm">G</span>
+            </div>
+            <span className="font-bold text-foreground text-lg tracking-tight">
+              Gestion
+            </span>
+          </div>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={toggleSidebar}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          className="text-muted-foreground hover:text-foreground"
         >
           {sidebarOpen ? (
             <PanelLeftClose className="w-5 h-5" />
           ) : (
             <PanelLeft className="w-5 h-5" />
           )}
-        </button>
+        </Button>
       </div>
 
+      {/* Quick Search Hint */}
+      {sidebarOpen && (
+        <div className="px-3 pt-3">
+          <button
+            onClick={() => {
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/50 text-muted-foreground text-xs hover:bg-muted transition"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span className="flex-1 text-left">Buscar...</span>
+            <kbd className="px-1.5 py-0.5 bg-background border border-border rounded text-[10px] font-mono">
+              Cmd+K
+            </kbd>
+          </button>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {navigation.filter((item) => canAccessRoute(profile?.role, item.href)).map((item) => {
+      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+        {filteredNav.map((item) => {
           const isActive =
             item.href === '/'
               ? pathname === '/'
               : pathname.startsWith(item.href);
           const showBadge = item.badge && inboxUnprocessedCount > 0;
-          return (
+
+          const linkContent = (
             <Link
               key={item.name}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition relative',
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative',
                 isActive
-                  ? 'bg-blue-600/20 text-blue-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
             >
               <div className="relative shrink-0">
                 <item.icon className="w-5 h-5" />
                 {showBadge && !sidebarOpen && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive rounded-full text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
                     {inboxUnprocessedCount > 9 ? '9+' : inboxUnprocessedCount}
                   </span>
                 )}
@@ -137,34 +169,61 @@ export default function Sidebar() {
                 <>
                   <span className="flex-1">{item.name}</span>
                   {showBadge && (
-                    <span className="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold text-white min-w-[20px] text-center animate-pulse">
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5 min-w-[20px] justify-center animate-pulse">
                       {inboxUnprocessedCount > 99 ? '99+' : inboxUnprocessedCount}
-                    </span>
+                    </Badge>
                   )}
                 </>
               )}
             </Link>
           );
+
+          if (!sidebarOpen) {
+            return (
+              <Tooltip key={item.name}>
+                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {item.name}
+                  {showBadge && ` (${inboxUnprocessedCount})`}
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return <div key={item.name}>{linkContent}</div>;
         })}
       </nav>
 
+      <Separator />
+
       {/* Profile + Logout */}
-      <div className="p-3 border-t border-slate-800">
+      <div className="p-3">
         {sidebarOpen && profile && (
           <div className="px-3 py-2 mb-2">
-            <p className="text-sm font-medium text-white truncate">
+            <p className="text-sm font-medium text-foreground truncate">
               {profile.full_name}
             </p>
-            <p className="text-xs text-slate-500 capitalize">{profile.role}</p>
+            <p className="text-xs text-muted-foreground capitalize">{profile.role}</p>
           </div>
         )}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-slate-800 transition"
-        >
-          <LogOut className="w-5 h-5 shrink-0" />
-          {sidebarOpen && <span>Cerrar sesion</span>}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              className={cn(
+                'w-full text-muted-foreground hover:text-destructive',
+                sidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center'
+              )}
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              {sidebarOpen && <span>Cerrar sesion</span>}
+            </Button>
+          </TooltipTrigger>
+          {!sidebarOpen && (
+            <TooltipContent side="right">Cerrar sesion</TooltipContent>
+          )}
+        </Tooltip>
       </div>
     </aside>
   );

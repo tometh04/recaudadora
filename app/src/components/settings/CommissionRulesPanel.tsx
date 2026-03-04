@@ -13,6 +13,26 @@ import {
   Save,
   X,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface CommissionRule {
   id: string;
@@ -188,148 +208,146 @@ export default function CommissionRulesPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-white font-semibold flex items-center gap-2">
+          <h3 className="text-foreground font-semibold flex items-center gap-2">
             <Percent className="w-4 h-4 text-yellow-400" />
             Reglas de Comision
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Comision general (sin cliente) aplica como default. Reglas por cliente tienen prioridad.
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition"
-        >
+        <Button size="sm" onClick={openCreate}>
           <Plus className="w-4 h-4" />
           Nueva Regla
-        </button>
+        </Button>
       </div>
 
       {/* Form */}
       {showForm && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Cliente (vacio = general)</label>
-              <select
-                value={form.client_id}
-                onChange={(e) => setForm({ ...form, client_id: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">-- General (todos) --</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+        <Card className="py-0">
+          <CardContent className="py-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Cliente (vacio = general)</Label>
+                <Select
+                  value={form.client_id || '_none'}
+                  onValueChange={(val) => setForm({ ...form, client_id: val === '_none' ? '' : val })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="-- General (todos) --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">-- General (todos) --</SelectItem>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Porcentaje (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.percentage}
+                  onChange={(e) => setForm({ ...form, percentage: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fee fijo ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.fixed_fee}
+                  onChange={(e) => setForm({ ...form, fixed_fee: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Monto minimo</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.min_amount}
+                  onChange={(e) => setForm({ ...form, min_amount: e.target.value })}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Porcentaje (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.percentage}
-                onChange={(e) => setForm({ ...form, percentage: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
+            <div className="flex items-center gap-2 pt-1">
+              <Button onClick={handleSave}>
+                <Save className="w-4 h-4" />
+                {editing ? 'Actualizar' : 'Crear'}
+              </Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>
+                <X className="w-4 h-4" />
+                Cancelar
+              </Button>
             </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Fee fijo ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.fixed_fee}
-                onChange={(e) => setForm({ ...form, fixed_fee: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Monto minimo</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.min_amount}
-                onChange={(e) => setForm({ ...form, min_amount: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg transition"
-            >
-              <Save className="w-4 h-4" />
-              {editing ? 'Actualizar' : 'Crear'}
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition"
-            >
-              <X className="w-4 h-4" />
-              Cancelar
-            </button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Rules table */}
       {rules.length === 0 ? (
-        <p className="text-slate-500 text-sm text-center py-8">
+        <p className="text-muted-foreground text-sm text-center py-8">
           No hay reglas de comision configuradas
         </p>
       ) : (
-        <div className="border border-slate-800 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-800/50 text-slate-400 text-xs">
-                <th className="text-left px-4 py-2.5">Cliente</th>
-                <th className="text-right px-4 py-2.5">Porcentaje</th>
-                <th className="text-right px-4 py-2.5">Fee Fijo</th>
-                <th className="text-right px-4 py-2.5">Min. Monto</th>
-                <th className="text-center px-4 py-2.5">Estado</th>
-                <th className="text-right px-4 py-2.5">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="py-0 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-4">Cliente</TableHead>
+                <TableHead className="px-4 text-right">Porcentaje</TableHead>
+                <TableHead className="px-4 text-right">Fee Fijo</TableHead>
+                <TableHead className="px-4 text-right">Min. Monto</TableHead>
+                <TableHead className="px-4 text-center">Estado</TableHead>
+                <TableHead className="px-4 text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rules.map((rule) => (
-                <tr key={rule.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition">
-                  <td className="px-4 py-3 text-white">
+                <TableRow key={rule.id}>
+                  <TableCell className="px-4 py-3 text-foreground">
                     {rule.client?.name || (
-                      <span className="text-slate-400 italic flex items-center gap-1">
+                      <span className="text-muted-foreground italic flex items-center gap-1">
                         <DollarSign className="w-3 h-3" />
                         General (todos)
                       </span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-right text-yellow-400 font-medium">{rule.percentage}%</td>
-                  <td className="px-4 py-3 text-right text-slate-300">{formatCurrency(rule.fixed_fee)}</td>
-                  <td className="px-4 py-3 text-right text-slate-300">{formatCurrency(rule.min_amount)}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs ${rule.is_active ? 'bg-green-500/10 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right text-yellow-400 font-medium">{rule.percentage}%</TableCell>
+                  <TableCell className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(rule.fixed_fee)}</TableCell>
+                  <TableCell className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(rule.min_amount)}</TableCell>
+                  <TableCell className="px-4 py-3 text-center">
+                    <Badge className={rule.is_active ? 'bg-green-500/10 text-green-400' : 'bg-muted text-muted-foreground'}>
                       {rule.is_active ? 'Activa' : 'Inactiva'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEdit(rule)}
-                        className="p-1.5 text-slate-400 hover:text-blue-400 transition"
+                        className="text-muted-foreground hover:text-blue-400"
                       >
                         <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleDelete(rule.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-400 transition"
+                        className="text-muted-foreground hover:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );

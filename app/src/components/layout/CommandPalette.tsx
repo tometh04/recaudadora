@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { isDemoMode } from '@/lib/use-demo';
 import { DEMO_CLIENTS, DEMO_ACCOUNTS, DEMO_INBOX } from '@/lib/demo-data';
 import {
-  Search,
   Users,
   Landmark,
   FileCheck,
@@ -17,8 +16,16 @@ import {
   CalendarCheck,
   Settings,
   AlertOctagon,
-  ArrowRight,
 } from 'lucide-react';
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandSeparator,
+} from '@/components/ui/command';
 
 interface SearchResult {
   id: string;
@@ -54,9 +61,7 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
 
@@ -67,21 +72,16 @@ export default function CommandPalette() {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
-      if (e.key === 'Escape') {
-        setOpen(false);
-      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Focus input when opening
+  // Reset state when opening
   useEffect(() => {
     if (open) {
       setQuery('');
-      setResults([]);
-      setActiveIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setResults(NAV_ITEMS);
     }
   }, [open]);
 
@@ -208,7 +208,6 @@ export default function CommandPalette() {
       }
 
       setResults(allResults);
-      setActiveIndex(0);
       setLoading(false);
     },
     []
@@ -225,18 +224,6 @@ export default function CommandPalette() {
     setOpen(false);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveIndex((prev) => Math.min(prev + 1, results.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && results[activeIndex]) {
-      handleSelect(results[activeIndex]);
-    }
-  }
-
   // Group results by type
   const grouped = results.reduce((acc, r) => {
     if (!acc[r.type]) acc[r.type] = [];
@@ -244,97 +231,74 @@ export default function CommandPalette() {
     return acc;
   }, {} as Record<string, SearchResult[]>);
 
-  let flatIndex = 0;
-
-  if (!open) return null;
+  const groupEntries = Object.entries(grouped);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[15vh]">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => setOpen(false)}
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      title="Buscar"
+      description="Buscar clientes, cuentas, comprobantes y navegacion"
+      showCloseButton={false}
+      shouldFilter={false}
+    >
+      <CommandInput
+        placeholder="Buscar clientes, cuentas, comprobantes..."
+        value={query}
+        onValueChange={handleInputChange}
       />
-
-      {/* Palette */}
-      <div className="relative w-full max-w-xl mx-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Search Input */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800">
-          <Search className="w-5 h-5 text-slate-400 shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => handleInputChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Buscar clientes, cuentas, comprobantes..."
-            className="flex-1 bg-transparent text-white text-sm placeholder:text-slate-500 focus:outline-none"
-          />
-          <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-400 font-mono">
-            ESC
-          </kbd>
-        </div>
-
-        {/* Results */}
-        <div className="max-h-[50vh] overflow-y-auto py-2">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : results.length === 0 && query.trim() ? (
-            <p className="text-slate-500 text-sm text-center py-8">Sin resultados para &quot;{query}&quot;</p>
-          ) : (
-            Object.entries(grouped).map(([type, items]) => {
-              return (
-                <div key={type}>
-                  <p className="px-5 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                    {TYPE_LABELS[type] || type}
-                  </p>
+      <CommandList className="max-h-[50vh]">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            <CommandEmpty>Sin resultados para &quot;{query}&quot;</CommandEmpty>
+            {groupEntries.map(([type, items], groupIndex) => (
+              <div key={type}>
+                {groupIndex > 0 && <CommandSeparator />}
+                <CommandGroup heading={TYPE_LABELS[type] || type}>
                   {items.map((item) => {
-                    const idx = flatIndex++;
                     const Icon = item.icon;
                     return (
-                      <button
+                      <CommandItem
                         key={item.id}
-                        onClick={() => handleSelect(item)}
-                        onMouseEnter={() => setActiveIndex(idx)}
-                        className={`w-full flex items-center gap-3 px-5 py-2.5 text-left transition ${
-                          idx === activeIndex ? 'bg-blue-600/20 text-white' : 'text-slate-300 hover:bg-slate-800/50'
-                        }`}
+                        value={item.id}
+                        onSelect={() => handleSelect(item)}
                       >
-                        <Icon className="w-4 h-4 shrink-0 text-slate-400" />
+                        <Icon className="size-4 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm truncate">{item.title}</p>
                           {item.subtitle && (
-                            <p className="text-xs text-slate-500 truncate">{item.subtitle}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {item.subtitle}
+                            </p>
                           )}
                         </div>
-                        {idx === activeIndex && <ArrowRight className="w-4 h-4 text-blue-400 shrink-0" />}
-                      </button>
+                      </CommandItem>
                     );
                   })}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-2.5 border-t border-slate-800 flex items-center gap-4 text-[10px] text-slate-500">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded font-mono">↑↓</kbd>
-            navegar
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded font-mono">↵</kbd>
-            seleccionar
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded font-mono">esc</kbd>
-            cerrar
-          </span>
-        </div>
+                </CommandGroup>
+              </div>
+            ))}
+          </>
+        )}
+      </CommandList>
+      <div className="border-t border-border px-4 py-2.5 flex items-center gap-4 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <kbd className="px-1 py-0.5 bg-muted border border-border rounded font-mono">↑↓</kbd>
+          navegar
+        </span>
+        <span className="flex items-center gap-1">
+          <kbd className="px-1 py-0.5 bg-muted border border-border rounded font-mono">↵</kbd>
+          seleccionar
+        </span>
+        <span className="flex items-center gap-1">
+          <kbd className="px-1 py-0.5 bg-muted border border-border rounded font-mono">esc</kbd>
+          cerrar
+        </span>
       </div>
-    </div>
+    </CommandDialog>
   );
 }

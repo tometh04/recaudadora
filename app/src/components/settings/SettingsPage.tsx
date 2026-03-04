@@ -16,14 +16,30 @@ import {
 } from 'lucide-react';
 import type { Profile, UserRole } from '@/types/database';
 
-type Tab = 'general' | 'comisiones' | 'notificaciones' | 'usuarios';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
-const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-  { key: 'general', label: 'General', icon: Building2 },
-  { key: 'comisiones', label: 'Comisiones', icon: Percent },
-  { key: 'notificaciones', label: 'Notificaciones', icon: Bell },
-  { key: 'usuarios', label: 'Usuarios', icon: Users },
-];
+type Tab = 'general' | 'comisiones' | 'notificaciones' | 'usuarios';
 
 const DEMO_USERS: Profile[] = [
   DEMO_PROFILE,
@@ -155,7 +171,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -164,213 +180,199 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Settings className="w-6 h-6 text-blue-400" />
           Configuracion
         </h1>
-        <p className="text-slate-400 mt-1">Parametros del sistema</p>
+        <p className="text-muted-foreground mt-1">Parametros del sistema</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-900/50 border border-slate-800 rounded-xl p-1">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
-                activeTab === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <Tabs defaultValue="general" onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList>
+          <TabsTrigger value="general">
+            <Building2 className="w-4 h-4" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="comisiones">
+            <Percent className="w-4 h-4" />
+            Comisiones
+          </TabsTrigger>
+          <TabsTrigger value="notificaciones">
+            <Bell className="w-4 h-4" />
+            Notificaciones
+          </TabsTrigger>
+          <TabsTrigger value="usuarios">
+            <Users className="w-4 h-4" />
+            Usuarios
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tab Content */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        {activeTab === 'general' && (
-          <div className="space-y-4 max-w-lg">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Nombre de la empresa</label>
-              <input
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Moneda por defecto</label>
-              <select
-                value={defaultCurrency}
-                onChange={(e) => setDefaultCurrency(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ARS">ARS (Peso Argentino)</option>
-                <option value="USD">USD (Dolar Estadounidense)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Timezone</label>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="America/Argentina/Buenos_Aires">Buenos Aires (ART)</option>
-                <option value="America/Sao_Paulo">Sao Paulo (BRT)</option>
-                <option value="America/New_York">New York (EST)</option>
-                <option value="UTC">UTC</option>
-              </select>
-            </div>
-            <button
-              onClick={saveGeneral}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              Guardar
-            </button>
-          </div>
-        )}
+        <TabsContent value="general">
+          <Card>
+            <CardContent className="space-y-4 max-w-lg">
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Nombre de la empresa</Label>
+                <Input
+                  id="companyName"
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Moneda por defecto</Label>
+                <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ARS">ARS (Peso Argentino)</SelectItem>
+                    <SelectItem value="USD">USD (Dolar Estadounidense)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Timezone</Label>
+                <Select value={timezone} onValueChange={setTimezone}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/Argentina/Buenos_Aires">Buenos Aires (ART)</SelectItem>
+                    <SelectItem value="America/Sao_Paulo">Sao Paulo (BRT)</SelectItem>
+                    <SelectItem value="America/New_York">New York (EST)</SelectItem>
+                    <SelectItem value="UTC">UTC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={saveGeneral} disabled={saving}>
+                <Save className="w-4 h-4" />
+                Guardar
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        {activeTab === 'comisiones' && <CommissionRulesPanel />}
+        <TabsContent value="comisiones">
+          <CommissionRulesPanel />
+        </TabsContent>
 
-        {activeTab === 'notificaciones' && (
-          <div className="space-y-4 max-w-lg">
-            <div className="flex items-center justify-between py-3 border-b border-slate-800">
-              <div>
-                <p className="text-white text-sm font-medium">Notificaciones en tiempo real</p>
-                <p className="text-xs text-slate-500">Recibir toasts cuando ocurran eventos</p>
+        <TabsContent value="notificaciones">
+          <Card>
+            <CardContent className="space-y-4 max-w-lg">
+              <div className="flex items-center justify-between py-3 border-b border-border">
+                <div>
+                  <p className="text-foreground text-sm font-medium">Notificaciones en tiempo real</p>
+                  <p className="text-xs text-muted-foreground">Recibir toasts cuando ocurran eventos</p>
+                </div>
+                <Switch checked={realtimeEnabled} onCheckedChange={setRealtimeEnabled} />
               </div>
-              <button
-                onClick={() => setRealtimeEnabled(!realtimeEnabled)}
-                className={`relative w-11 h-6 rounded-full transition ${realtimeEnabled ? 'bg-blue-600' : 'bg-slate-700'}`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition ${realtimeEnabled ? 'left-[22px]' : 'left-0.5'}`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between py-3 border-b border-slate-800">
-              <div>
-                <p className="text-white text-sm">Nuevos comprobantes</p>
+              <div className="flex items-center justify-between py-3 border-b border-border">
+                <div>
+                  <p className="text-foreground text-sm">Nuevos comprobantes</p>
+                </div>
+                <Switch checked={notifyNew} onCheckedChange={setNotifyNew} />
               </div>
-              <button
-                onClick={() => setNotifyNew(!notifyNew)}
-                className={`relative w-11 h-6 rounded-full transition ${notifyNew ? 'bg-blue-600' : 'bg-slate-700'}`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition ${notifyNew ? 'left-[22px]' : 'left-0.5'}`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between py-3 border-b border-slate-800">
-              <div>
-                <p className="text-white text-sm">Verificaciones</p>
+              <div className="flex items-center justify-between py-3 border-b border-border">
+                <div>
+                  <p className="text-foreground text-sm">Verificaciones</p>
+                </div>
+                <Switch checked={notifyVerified} onCheckedChange={setNotifyVerified} />
               </div>
-              <button
-                onClick={() => setNotifyVerified(!notifyVerified)}
-                className={`relative w-11 h-6 rounded-full transition ${notifyVerified ? 'bg-blue-600' : 'bg-slate-700'}`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition ${notifyVerified ? 'left-[22px]' : 'left-0.5'}`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between py-3 border-b border-slate-800">
-              <div>
-                <p className="text-white text-sm">Rechazos</p>
+              <div className="flex items-center justify-between py-3 border-b border-border">
+                <div>
+                  <p className="text-foreground text-sm">Rechazos</p>
+                </div>
+                <Switch checked={notifyRejected} onCheckedChange={setNotifyRejected} />
               </div>
-              <button
-                onClick={() => setNotifyRejected(!notifyRejected)}
-                className={`relative w-11 h-6 rounded-full transition ${notifyRejected ? 'bg-blue-600' : 'bg-slate-700'}`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition ${notifyRejected ? 'left-[22px]' : 'left-0.5'}`} />
-              </button>
-            </div>
-            <button
-              onClick={saveNotifications}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              Guardar
-            </button>
-          </div>
-        )}
+              <Button onClick={saveNotifications} disabled={saving}>
+                <Save className="w-4 h-4" />
+                Guardar
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        {activeTab === 'usuarios' && (
-          <div>
-            <div className="border border-slate-800 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-800/50 text-slate-400 text-xs">
-                    <th className="text-left px-4 py-2.5">Nombre</th>
-                    <th className="text-left px-4 py-2.5">Rol</th>
-                    <th className="text-center px-4 py-2.5">Estado</th>
-                    <th className="text-right px-4 py-2.5">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
+        <TabsContent value="usuarios">
+          <Card>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-left">Nombre</TableHead>
+                    <TableHead className="text-left">Rol</TableHead>
+                    <TableHead className="text-center">Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {users.map((u) => (
-                    <tr key={u.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition">
-                      <td className="px-4 py-3 text-white font-medium">{u.full_name}</td>
-                      <td className="px-4 py-3">
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium text-foreground">{u.full_name}</TableCell>
+                      <TableCell>
                         {editingUser?.id === u.id ? (
                           <div className="flex items-center gap-2">
-                            <select
-                              value={editRole}
-                              onChange={(e) => setEditRole(e.target.value as UserRole)}
-                              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white"
-                            >
-                              {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                                <option key={k} value={k}>{v}</option>
-                              ))}
-                            </select>
-                            <button
+                            <Select value={editRole} onValueChange={(v) => setEditRole(v as UserRole)}>
+                              <SelectTrigger className="w-auto">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="xs"
                               onClick={() => updateUserRole(u.id, editRole)}
-                              className="px-2 py-1 bg-green-600 text-white text-xs rounded"
+                              className="bg-green-600 hover:bg-green-500 text-white"
                             >
                               OK
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
                               onClick={() => setEditingUser(null)}
-                              className="px-2 py-1 bg-slate-700 text-white text-xs rounded"
                             >
                               X
-                            </button>
+                            </Button>
                           </div>
                         ) : (
-                          <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs rounded">
+                          <Badge variant="secondary" className="bg-blue-500/10 text-blue-400">
                             {ROLE_LABELS[u.role] || u.role}
-                          </span>
+                          </Badge>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-xs ${u.is_active ? 'bg-green-500/10 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="secondary"
+                          className={u.is_active ? 'bg-green-500/10 text-green-400' : 'bg-muted text-muted-foreground'}
+                        >
                           {u.is_active ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
                           onClick={() => {
                             setEditingUser(u);
                             setEditRole(u.role);
                           }}
-                          className="p-1.5 text-slate-400 hover:text-blue-400 transition"
+                          className="text-muted-foreground hover:text-blue-400"
                         >
                           <Pencil className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

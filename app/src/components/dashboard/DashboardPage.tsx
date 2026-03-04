@@ -8,6 +8,7 @@ import {
   DEMO_INBOX_SUMMARY,
 } from '@/lib/demo-data';
 import { formatCurrency } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   LayoutDashboard,
   Inbox,
@@ -102,28 +103,30 @@ function StatCard({
   trend?: 'up' | 'down';
 }) {
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-slate-400 text-sm">{title}</p>
-          <p className="text-2xl font-bold text-white mt-1">{value}</p>
-          {subtitle && (
-            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              {trend === 'up' && (
-                <ArrowUpRight className="w-3 h-3 text-green-400" />
-              )}
-              {trend === 'down' && (
-                <ArrowDownRight className="w-3 h-3 text-red-400" />
-              )}
-              {subtitle}
-            </p>
-          )}
+    <Card className="hover:border-primary/20 transition-colors">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-muted-foreground text-sm">{title}</p>
+            <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
+            {subtitle && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                {trend === 'up' && (
+                  <ArrowUpRight className="w-3 h-3 text-green-400" />
+                )}
+                {trend === 'down' && (
+                  <ArrowDownRight className="w-3 h-3 text-red-400" />
+                )}
+                {subtitle}
+              </p>
+            )}
+          </div>
+          <div className={`p-2.5 rounded-lg ${color}`}>
+            <Icon className="w-5 h-5" />
+          </div>
         </div>
-        <div className={`p-2.5 rounded-lg ${color}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -131,8 +134,8 @@ function StatCard({
 function ChartTooltipContent({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
-      <p className="text-slate-300 text-xs mb-1">{label}</p>
+    <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
+      <p className="text-muted-foreground text-xs mb-1">{label}</p>
       {payload.map((entry: any, i: number) => (
         <p key={i} className="text-sm font-medium" style={{ color: entry.color }}>
           {entry.name}: {entry.value}
@@ -145,8 +148,8 @@ function ChartTooltipContent({ active, payload, label }: any) {
 function AreaTooltipContent({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
-      <p className="text-slate-300 text-xs mb-1">{label}</p>
+    <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
+      <p className="text-muted-foreground text-xs mb-1">{label}</p>
       {payload.map((entry: any, i: number) => (
         <p key={i} className="text-sm font-medium" style={{ color: entry.color }}>
           {formatCurrency(entry.value)}
@@ -160,7 +163,7 @@ function PieTooltipContent({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
+    <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
       <p className="text-sm font-medium" style={{ color: d.payload.fill }}>
         {d.name}: {d.value}
       </p>
@@ -363,11 +366,11 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <LayoutDashboard className="w-6 h-6 text-blue-400" />
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <LayoutDashboard className="w-6 h-6 text-primary" />
           Dashboard
         </h1>
-        <p className="text-slate-400 mt-1">
+        <p className="text-muted-foreground mt-1">
           Vista general de la operacion
         </p>
       </div>
@@ -409,219 +412,239 @@ export default function DashboardPage() {
       {/* Charts Row 1: Bar + Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Bar Chart - Daily Volume */}
-        <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-blue-400" />
-            Volumen Diario (14 dias)
-          </h2>
-          {dailyVolume.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dailyVolume} barGap={2}>
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-blue-400" />
+              Volumen Diario (14 dias)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dailyVolume.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={dailyVolume} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    axisLine={{ stroke: '#475569' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    axisLine={{ stroke: '#475569' }}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<ChartTooltipContent />} />
+                  <Bar
+                    dataKey="recibidos"
+                    name="Recibidos"
+                    fill="#3b82f6"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={24}
+                  />
+                  <Bar
+                    dataKey="verificados"
+                    name="Verificados"
+                    fill="#22c55e"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={24}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground text-sm py-16 text-center">
+                No hay datos para mostrar
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pie/Donut Chart - Status Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <PieChartIcon className="w-5 h-5 text-purple-400" />
+              Por Estado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={index} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PieTooltipContent />} />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
+                    iconSize={8}
+                    formatter={(value: string) => (
+                      <span className="text-muted-foreground text-xs">{value}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground text-sm py-16 text-center">
+                No hay comprobantes
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Chart Row 2: Area Chart - Cumulative Verified */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Activity className="w-5 h-5 text-emerald-400" />
+            Monto Verificado Acumulado (30 dias)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {cumulativeData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={cumulativeData}>
+                <defs>
+                  <linearGradient id="gradientVerified" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: '#94a3b8', fontSize: 11 }}
                   axisLine={{ stroke: '#475569' }}
                   tickLine={false}
+                  interval={4}
                 />
                 <YAxis
                   tick={{ fill: '#94a3b8', fontSize: 11 }}
                   axisLine={{ stroke: '#475569' }}
                   tickLine={false}
-                  allowDecimals={false}
+                  tickFormatter={(v: number) =>
+                    v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()
+                  }
                 />
-                <Tooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="recibidos"
-                  name="Recibidos"
-                  fill="#3b82f6"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={24}
+                <Tooltip content={<AreaTooltipContent />} />
+                <Area
+                  type="monotone"
+                  dataKey="monto"
+                  name="Acumulado"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fill="url(#gradientVerified)"
                 />
-                <Bar
-                  dataKey="verificados"
-                  name="Verificados"
-                  fill="#22c55e"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={24}
-                />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-slate-500 text-sm py-16 text-center">
+            <p className="text-muted-foreground text-sm py-12 text-center">
               No hay datos para mostrar
             </p>
           )}
-        </div>
-
-        {/* Pie/Donut Chart - Status Distribution */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-            <PieChartIcon className="w-5 h-5 text-purple-400" />
-            Por Estado
-          </h2>
-          {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={3}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={index} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip content={<PieTooltipContent />} />
-                <Legend
-                  verticalAlign="bottom"
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(value: string) => (
-                    <span className="text-slate-300 text-xs">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-slate-500 text-sm py-16 text-center">
-              No hay comprobantes
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Chart Row 2: Area Chart - Cumulative Verified */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-          <Activity className="w-5 h-5 text-emerald-400" />
-          Monto Verificado Acumulado (30 dias)
-        </h2>
-        {cumulativeData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={cumulativeData}>
-              <defs>
-                <linearGradient id="gradientVerified" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: '#475569' }}
-                tickLine={false}
-                interval={4}
-              />
-              <YAxis
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: '#475569' }}
-                tickLine={false}
-                tickFormatter={(v: number) =>
-                  v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()
-                }
-              />
-              <Tooltip content={<AreaTooltipContent />} />
-              <Area
-                type="monotone"
-                dataKey="monto"
-                name="Acumulado"
-                stroke="#10b981"
-                strokeWidth={2}
-                fill="url(#gradientVerified)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-slate-500 text-sm py-12 text-center">
-            No hay datos para mostrar
-          </p>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Saldos por Cliente */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5 text-blue-400" />
-            Saldos por Cliente
-          </h2>
-          {balances.length === 0 ? (
-            <p className="text-slate-500 text-sm py-8 text-center">
-              No hay clientes con movimientos
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {balances.map((b) => (
-                <div
-                  key={b.client_id}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-800/50 transition"
-                >
-                  <div>
-                    <p className="text-white text-sm font-medium">
-                      {b.client_name}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Credito: {formatCurrency(b.total_credito)} | Debito:{' '}
-                      {formatCurrency(b.total_debito)}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-sm font-bold ${
-                      b.saldo >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-400" />
+              Saldos por Cliente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {balances.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">
+                No hay clientes con movimientos
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {balances.map((b) => (
+                  <div
+                    key={b.client_id}
+                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted transition"
                   >
-                    {formatCurrency(b.saldo)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                    <div>
+                      <p className="text-foreground text-sm font-medium">
+                        {b.client_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Credito: {formatCurrency(b.total_credito)} | Debito:{' '}
+                        {formatCurrency(b.total_debito)}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-sm font-bold ${
+                        b.saldo >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      {formatCurrency(b.saldo)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Resumen por Estado */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-emerald-400" />
-            Resumen por Estado
-          </h2>
-          {summary.length === 0 ? (
-            <p className="text-slate-500 text-sm py-8 text-center">
-              No hay comprobantes aun
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {summary.map((s) => {
-                const total = summary.reduce((acc, x) => acc + x.count, 0);
-                const pct = total > 0 ? (s.count / total) * 100 : 0;
-                return (
-                  <div key={s.status}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-slate-300 text-sm capitalize">
-                        {s.status.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-white text-sm font-medium">
-                        {s.count}
-                      </span>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+              Resumen por Estado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {summary.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">
+                No hay comprobantes aun
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {summary.map((s) => {
+                  const total = summary.reduce((acc, x) => acc + x.count, 0);
+                  const pct = total > 0 ? (s.count / total) * 100 : 0;
+                  return (
+                    <div key={s.status}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-muted-foreground text-sm capitalize">
+                          {s.status.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-foreground text-sm font-medium">
+                          {s.count}
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

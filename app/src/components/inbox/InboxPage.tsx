@@ -28,6 +28,36 @@ import {
 } from '@/lib/utils';
 import type { InboxItem, InboxStatus, B2BClient, Account } from '@/types/database';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+
 export default function InboxPage() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [clients, setClients] = useState<B2BClient[]>([]);
@@ -390,146 +420,130 @@ export default function InboxPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <FileCheck className="w-6 h-6 text-blue-400" />
             Comprobantes
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-muted-foreground mt-1">
             {items.length} comprobantes totales
           </p>
         </div>
-        <button
-          onClick={() => setShowUpload(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
-        >
+        <Button onClick={() => setShowUpload(true)}>
           <Upload className="w-4 h-4" />
           Subir comprobante
-        </button>
+        </Button>
       </div>
 
       {/* Status pills */}
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
+          variant={statusFilter === 'todos' ? 'default' : 'secondary'}
+          size="sm"
           onClick={() => setStatusFilter('todos')}
-          className={cn(
-            'px-3 py-1.5 rounded-lg text-xs font-medium transition',
-            statusFilter === 'todos'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-          )}
         >
           Todos ({items.length})
-        </button>
+        </Button>
         {Object.entries(STATUS_LABELS).map(([key, label]) => {
           const count = statusCounts[key] || 0;
           if (count === 0) return null;
           return (
-            <button
+            <Button
               key={key}
+              variant={statusFilter === key ? 'default' : 'secondary'}
+              size="sm"
               onClick={() => setStatusFilter(key as InboxStatus)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-medium transition',
-                statusFilter === key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              )}
             >
               {label} ({count})
-            </button>
+            </Button>
           );
         })}
       </div>
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
           type="text"
           placeholder="Buscar por cliente, telefono, referencia, monto..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="pl-10"
         />
       </div>
 
       {/* Items Table */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="p-4 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10 p-4">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                    onCheckedChange={toggleSelectAll}
                   />
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Comprobante
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Estado
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Cliente
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Cuenta
-                </th>
-                <th className="text-right p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="text-right p-4">
                   Monto
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Fecha Tx
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Recibido
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
+                </TableHead>
+                <TableHead className="p-4">
                   Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-500">
+                <TableRow>
+                  <TableCell colSpan={9} className="p-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                       Cargando...
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-500">
+                <TableRow>
+                  <TableCell colSpan={9} className="p-8 text-center text-muted-foreground">
                     No hay comprobantes
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((item) => (
-                  <tr
+                  <TableRow
                     key={item.id}
                     className={cn(
-                      'border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer transition',
+                      'cursor-pointer',
                       selectedIds.has(item.id) && 'bg-blue-900/10'
                     )}
                     onClick={() => handleSelectItem(item)}
                   >
-                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
+                    <TableCell className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
                         checked={selectedIds.has(item.id)}
-                        onChange={() => toggleSelect(item.id)}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                        onCheckedChange={() => toggleSelect(item.id)}
                       />
-                    </td>
-                    <td className="p-4">
+                    </TableCell>
+                    <TableCell className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0">
                           {(item.processed_image_url || item.original_image_url) ? (
                             <img
                               src={item.processed_image_url || item.original_image_url!}
@@ -537,191 +551,192 @@ export default function InboxPage() {
                               className="w-10 h-10 object-cover rounded-lg"
                             />
                           ) : (
-                            <ImageIcon className="w-5 h-5 text-slate-500" />
+                            <ImageIcon className="w-5 h-5 text-muted-foreground" />
                           )}
                         </div>
                         <div>
-                          <p className="text-white text-xs font-mono">
+                          <p className="text-foreground text-xs font-mono">
                             {item.id.slice(0, 8)}
                           </p>
-                          <p className="text-slate-500 text-xs capitalize">
+                          <p className="text-muted-foreground text-xs capitalize">
                             {item.source.replace(/_/g, ' ')}
                           </p>
                         </div>
                       </div>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={cn(
-                          'px-2 py-1 rounded-md text-xs font-medium',
-                          STATUS_COLORS[item.status]
-                        )}
-                      >
+                    </TableCell>
+                    <TableCell className="p-4">
+                      <Badge className={STATUS_COLORS[item.status]}>
                         {STATUS_LABELS[item.status]}
-                      </span>
-                    </td>
-                    <td className="p-4 text-slate-300">
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="p-4 text-foreground">
                       {item.client?.name || (
-                        <span className="text-slate-600 italic">
+                        <span className="text-muted-foreground italic">
                           Sin asignar
                         </span>
                       )}
-                    </td>
-                    <td className="p-4 text-slate-300">
+                    </TableCell>
+                    <TableCell className="p-4 text-foreground">
                       {item.account?.name || (
-                        <span className="text-slate-600 italic">—</span>
+                        <span className="text-muted-foreground italic">—</span>
                       )}
-                    </td>
-                    <td className="p-4 text-right font-mono text-white">
+                    </TableCell>
+                    <TableCell className="p-4 text-right font-mono text-foreground">
                       {item.amount ? formatCurrency(item.amount) : '—'}
-                    </td>
-                    <td className="p-4 text-slate-300 text-xs">
+                    </TableCell>
+                    <TableCell className="p-4 text-foreground text-xs">
                       {item.transaction_date || '—'}
-                    </td>
-                    <td className="p-4 text-slate-500 text-xs">
+                    </TableCell>
+                    <TableCell className="p-4 text-muted-foreground text-xs">
                       {timeAgo(item.created_at)}
-                    </td>
-                    <td className="p-4">
+                    </TableCell>
+                    <TableCell className="p-4">
                       <div className="flex items-center gap-1">
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectItem(item);
                           }}
-                          className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition"
                           title="Ver detalle"
                         >
                           <Eye className="w-4 h-4" />
-                        </button>
+                        </Button>
                         {item.status === 'pendiente_verificacion' && (
                           <>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 updateItem(item.id, { status: 'verificado' });
                               }}
-                              className="p-1.5 rounded hover:bg-green-900/30 text-slate-400 hover:text-green-400 transition"
+                              className="hover:bg-green-900/30 hover:text-green-400"
                               title="Verificar"
                             >
                               <CheckCircle className="w-4 h-4" />
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 updateItem(item.id, { status: 'rechazado' });
                               }}
-                              className="p-1.5 rounded hover:bg-red-900/30 text-slate-400 hover:text-red-400 transition"
+                              className="hover:bg-red-900/30 hover:text-red-400"
                               title="Rechazar"
                             >
                               <XCircle className="w-4 h-4" />
-                            </button>
+                            </Button>
                           </>
                         )}
                         {item.status === 'recibido' && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={(e) => {
                               e.stopPropagation();
                               updateItem(item.id, { status: 'duplicado' });
                             }}
-                            className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-yellow-400 transition"
+                            className="hover:text-yellow-400"
                             title="Marcar duplicado"
                           >
                             <Copy className="w-4 h-4" />
-                          </button>
+                          </Button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Floating Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-800 border border-slate-700 rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-4">
-          <span className="text-white text-sm font-medium">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-muted border border-border rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-4">
+          <span className="text-foreground text-sm font-medium">
             {selectedIds.size} seleccionados
           </span>
-          <div className="w-px h-6 bg-slate-700" />
-          <button
+          <div className="w-px h-6 bg-border" />
+          <Button
             onClick={() => setBulkConfirm({ action: 'verificar', count: selectedIds.size })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition"
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             <CheckCircle className="w-4 h-4" />
             Verificar
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setBulkConfirm({ action: 'rechazar', count: selectedIds.size })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition"
+            className="bg-orange-600 hover:bg-orange-700 text-white"
           >
             <XCircle className="w-4 h-4" />
             Rechazar
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setBulkConfirm({ action: 'eliminar', count: selectedIds.size })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+            className="bg-red-600 hover:bg-red-700 text-white"
           >
             <Trash2 className="w-4 h-4" />
             Eliminar
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSelectedIds(new Set())}
-            className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition"
           >
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Bulk Confirm Dialog */}
-      {bulkConfirm && (
-        <BulkConfirmDialog
-          action={bulkConfirm.action}
-          count={bulkConfirm.count}
-          onConfirm={() => handleBulkAction(bulkConfirm.action)}
-          onCancel={() => setBulkConfirm(null)}
-        />
-      )}
+      <BulkConfirmDialog
+        bulkConfirm={bulkConfirm}
+        onConfirm={() => bulkConfirm && handleBulkAction(bulkConfirm.action)}
+        onCancel={() => setBulkConfirm(null)}
+      />
 
       {/* Detail Modal */}
-      {selectedItem && (
-        <ItemDetailModal
-          item={selectedItem}
-          clients={clients}
-          accounts={accounts}
-          onClose={() => setSelectedItem(null)}
-          onUpdate={(updates) => {
+      <ItemDetailModal
+        item={selectedItem}
+        clients={clients}
+        accounts={accounts}
+        onClose={() => setSelectedItem(null)}
+        onUpdate={(updates) => {
+          if (selectedItem) {
             updateItem(selectedItem.id, updates);
             setSelectedItem(null);
-          }}
-        />
-      )}
+          }
+        }}
+      />
 
       {/* Upload Modal */}
-      {showUpload && (
-        <UploadModal
-          onClose={() => setShowUpload(false)}
-          onUpload={handleUpload}
-        />
-      )}
+      <UploadModal
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        onUpload={handleUpload}
+      />
     </div>
   );
 }
 
 function BulkConfirmDialog({
-  action,
-  count,
+  bulkConfirm,
   onConfirm,
   onCancel,
 }: {
-  action: 'verificar' | 'rechazar' | 'eliminar';
-  count: number;
+  bulkConfirm: { action: 'verificar' | 'rechazar' | 'eliminar'; count: number } | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  if (!bulkConfirm) return null;
+
+  const { action, count } = bulkConfirm;
+
   const config = {
     verificar: { title: 'Verificar comprobantes', color: 'bg-green-600 hover:bg-green-700', icon: CheckCircle, description: `Se marcaran ${count} comprobantes como verificados.` },
     rechazar: { title: 'Rechazar comprobantes', color: 'bg-orange-600 hover:bg-orange-700', icon: XCircle, description: `Se marcaran ${count} comprobantes como rechazados.` },
@@ -731,31 +746,27 @@ function BulkConfirmDialog({
   const Icon = config.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm m-4 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={cn('p-2 rounded-lg', action === 'eliminar' ? 'bg-red-500/10' : action === 'rechazar' ? 'bg-orange-500/10' : 'bg-green-500/10')}>
-            <Icon className={cn('w-5 h-5', action === 'eliminar' ? 'text-red-400' : action === 'rechazar' ? 'text-orange-400' : 'text-green-400')} />
+    <Dialog open={!!bulkConfirm} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className={cn('p-2 rounded-lg', action === 'eliminar' ? 'bg-red-500/10' : action === 'rechazar' ? 'bg-orange-500/10' : 'bg-green-500/10')}>
+              <Icon className={cn('w-5 h-5', action === 'eliminar' ? 'text-red-400' : action === 'rechazar' ? 'text-orange-400' : 'text-green-400')} />
+            </div>
+            <DialogTitle>{config.title}</DialogTitle>
           </div>
-          <h3 className="text-lg font-semibold text-white">{config.title}</h3>
-        </div>
-        <p className="text-slate-400 text-sm mb-6">{config.description}</p>
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition"
-          >
+          <DialogDescription>{config.description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} className="flex-1">
             Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className={cn('flex-1 py-2 text-white text-sm font-medium rounded-lg transition', config.color)}
-          >
+          </Button>
+          <Button onClick={onConfirm} className={cn('flex-1 text-white', config.color)}>
             Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -766,21 +777,33 @@ function ItemDetailModal({
   onClose,
   onUpdate,
 }: {
-  item: InboxItem;
+  item: InboxItem | null;
   clients: B2BClient[];
   accounts: Account[];
   onClose: () => void;
   onUpdate: (updates: Partial<InboxItem>) => void;
 }) {
-  const [clientId, setClientId] = useState(item.client_id || '');
-  const [accountId, setAccountId] = useState(item.account_id || '');
-  const [amount, setAmount] = useState(item.amount?.toString() || '');
-  const [txDate, setTxDate] = useState(item.transaction_date || '');
-  const [reference, setReference] = useState(item.reference_number || '');
+  const [clientId, setClientId] = useState(item?.client_id || '');
+  const [accountId, setAccountId] = useState(item?.account_id || '');
+  const [amount, setAmount] = useState(item?.amount?.toString() || '');
+  const [txDate, setTxDate] = useState(item?.transaction_date || '');
+  const [reference, setReference] = useState(item?.reference_number || '');
   const [ocrData, setOcrData] = useState<Record<string, any> | null>(null);
 
+  // Reset form state when item changes
   useEffect(() => {
-    if (isDemoMode()) return;
+    if (item) {
+      setClientId(item.client_id || '');
+      setAccountId(item.account_id || '');
+      setAmount(item.amount?.toString() || '');
+      setTxDate(item.transaction_date || '');
+      setReference(item.reference_number || '');
+      setOcrData(null);
+    }
+  }, [item]);
+
+  useEffect(() => {
+    if (!item || isDemoMode()) return;
     (async () => {
       try {
         const { createClient } = await import('@/lib/supabase/client');
@@ -795,56 +818,48 @@ function ItemDetailModal({
         }
       } catch { /* ignore */ }
     })();
-  }, [item.id]);
+  }, [item?.id]);
+
+  if (!item) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
-        <div className="flex items-center justify-between p-5 border-b border-slate-800">
-          <div>
-            <h2 className="text-lg font-semibold text-white">
-              Detalle de Comprobante
-            </h2>
-            <p className="text-slate-500 text-xs font-mono">{item.id}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={!!item} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto" showCloseButton={true}>
+        <DialogHeader>
+          <DialogTitle>Detalle de Comprobante</DialogTitle>
+          <DialogDescription className="font-mono">{item.id}</DialogDescription>
+        </DialogHeader>
 
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Image / PDF preview */}
           <div>
             {(item.processed_image_url || item.original_image_url) ? (
               <img
                 src={item.processed_image_url || item.original_image_url!}
                 alt="Comprobante"
-                className="w-full rounded-lg border border-slate-700"
+                className="w-full rounded-lg border border-border"
               />
             ) : (
-              <div className="w-full h-64 bg-slate-800 rounded-lg flex items-center justify-center">
-                <ImageIcon className="w-12 h-12 text-slate-600" />
+              <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center">
+                <ImageIcon className="w-12 h-12 text-muted-foreground" />
               </div>
             )}
             <div className="mt-3 space-y-1">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Fuente:{' '}
-                <span className="text-slate-300 capitalize">
+                <span className="text-foreground capitalize">
                   {item.source.replace(/_/g, ' ')}
                 </span>
               </p>
               {item.wa_phone_number && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Telefono:{' '}
-                  <span className="text-slate-300">{item.wa_phone_number}</span>
+                  <span className="text-foreground">{item.wa_phone_number}</span>
                 </p>
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Recibido:{' '}
-                <span className="text-slate-300">
+                <span className="text-foreground">
                   {formatDateTime(item.created_at)}
                 </span>
               </p>
@@ -853,37 +868,37 @@ function ItemDetailModal({
             {ocrData && (
               <div className="mt-4 space-y-2">
                 {(ocrData.sender_name || ocrData.sender_cuit) && (
-                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                  <div className="p-2.5 bg-muted/60 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <User className="w-3.5 h-3.5 text-blue-400" />
                       <span className="text-xs font-medium text-blue-400">Emisor (OCR)</span>
                     </div>
-                    {ocrData.sender_name && <p className="text-sm text-white">{ocrData.sender_name}</p>}
-                    {ocrData.sender_cuit && <p className="text-xs text-slate-400">CUIT: {ocrData.sender_cuit}</p>}
+                    {ocrData.sender_name && <p className="text-sm text-foreground">{ocrData.sender_name}</p>}
+                    {ocrData.sender_cuit && <p className="text-xs text-muted-foreground">CUIT: {ocrData.sender_cuit}</p>}
                   </div>
                 )}
                 {(ocrData.receiver_name || ocrData.receiver_cuit) && (
-                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                  <div className="p-2.5 bg-muted/60 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <Building2 className="w-3.5 h-3.5 text-green-400" />
                       <span className="text-xs font-medium text-green-400">Receptor (OCR)</span>
                     </div>
-                    {ocrData.receiver_name && <p className="text-sm text-white">{ocrData.receiver_name}</p>}
-                    {ocrData.receiver_cuit && <p className="text-xs text-slate-400">CUIT: {ocrData.receiver_cuit}</p>}
+                    {ocrData.receiver_name && <p className="text-sm text-foreground">{ocrData.receiver_name}</p>}
+                    {ocrData.receiver_cuit && <p className="text-xs text-muted-foreground">CUIT: {ocrData.receiver_cuit}</p>}
                   </div>
                 )}
                 {ocrData.bank_name && (
-                  <div className="p-2.5 bg-slate-800/60 rounded-lg">
+                  <div className="p-2.5 bg-muted/60 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <Building2 className="w-3.5 h-3.5 text-yellow-400" />
                       <span className="text-xs font-medium text-yellow-400">Entidad (OCR)</span>
                     </div>
-                    <p className="text-sm text-white">{ocrData.bank_name}</p>
-                    {ocrData.account_number && <p className="text-xs text-slate-400">Cuenta: {ocrData.account_number}</p>}
+                    <p className="text-sm text-foreground">{ocrData.bank_name}</p>
+                    {ocrData.account_number && <p className="text-xs text-muted-foreground">Cuenta: {ocrData.account_number}</p>}
                   </div>
                 )}
                 {ocrData.description && (
-                  <p className="text-xs text-slate-500 italic">{ocrData.description}</p>
+                  <p className="text-xs text-muted-foreground italic">{ocrData.description}</p>
                 )}
               </div>
             )}
@@ -892,83 +907,83 @@ function ItemDetailModal({
           {/* Form */}
           <div className="space-y-4">
             <div>
-              <span className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', STATUS_COLORS[item.status])}>
+              <Badge className={cn('text-sm', STATUS_COLORS[item.status])}>
                 {STATUS_LABELS[item.status]}
-              </span>
+              </Badge>
             </div>
 
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Cliente</label>
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sin asignar</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <Label>Cliente</Label>
+              <Select value={clientId || '_none'} onValueChange={(val) => setClientId(val === '_none' ? '' : val)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sin asignar</SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {!clientId && ocrData?.sender_name && (
-                <p className="text-xs text-blue-400 mt-1">OCR detecta: {ocrData.sender_name}</p>
+                <p className="text-xs text-blue-400">OCR detecta: {ocrData.sender_name}</p>
               )}
             </div>
 
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Cuenta / Canal</label>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sin asignar</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <Label>Cuenta / Canal</Label>
+              <Select value={accountId || '_none'} onValueChange={(val) => setAccountId(val === '_none' ? '' : val)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sin asignar</SelectItem>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {!accountId && ocrData?.bank_name && (
-                <p className="text-xs text-yellow-400 mt-1">OCR detecta: {ocrData.bank_name}</p>
+                <p className="text-xs text-yellow-400">OCR detecta: {ocrData.bank_name}</p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Monto</label>
-                <input
+              <div className="space-y-2">
+                <Label>Monto</Label>
+                <Input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 {item.ocr_amount_confidence && (
-                  <p className="text-xs text-slate-500 mt-1">OCR: {item.ocr_amount_confidence}</p>
+                  <p className="text-xs text-muted-foreground">OCR: {item.ocr_amount_confidence}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Fecha Tx</label>
-                <input
+              <div className="space-y-2">
+                <Label>Fecha Tx</Label>
+                <Input
                   type="date"
                   value={txDate}
                   onChange={(e) => setTxDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Referencia</label>
-              <input
+            <div className="space-y-2">
+              <Label>Referencia</Label>
+              <Input
                 type="text"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="Nro de comprobante"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div className="flex gap-2 pt-2">
-              <button
+              <Button
+                className="flex-1"
                 onClick={() =>
                   onUpdate({
                     client_id: clientId || null,
@@ -982,33 +997,34 @@ function ItemDetailModal({
                         : item.status,
                   } as Partial<InboxItem>)
                 }
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
               >
                 Guardar
-              </button>
+              </Button>
               {(item.status === 'pendiente_verificacion' ||
                 item.status === 'ocr_listo') && (
-                <button
+                <Button
                   onClick={() =>
                     onUpdate({ status: 'verificado' } as Partial<InboxItem>)
                   }
-                  className="py-2 px-4 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition"
+                  className="bg-green-600 hover:bg-green-700 text-white"
                 >
                   Verificar
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function UploadModal({
+  open,
   onClose,
   onUpload,
 }: {
+  open: boolean;
   onClose: () => void;
   onUpload: (file: File) => void;
 }) {
@@ -1022,19 +1038,12 @@ function UploadModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md m-4 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">
-            Subir Comprobante
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-400"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Subir Comprobante</DialogTitle>
+          <DialogDescription>Arrastra una imagen o selecciona un archivo para subir.</DialogDescription>
+        </DialogHeader>
 
         <div
           onDragOver={(e) => {
@@ -1047,16 +1056,18 @@ function UploadModal({
             'border-2 border-dashed rounded-xl p-12 text-center transition',
             dragging
               ? 'border-blue-500 bg-blue-500/10'
-              : 'border-slate-700 hover:border-slate-600'
+              : 'border-border hover:border-muted-foreground'
           )}
         >
-          <Upload className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-          <p className="text-slate-300 text-sm mb-1">
+          <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-foreground text-sm mb-1">
             Arrastra la imagen aca
           </p>
-          <p className="text-slate-500 text-xs">o</p>
-          <label className="mt-3 inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg cursor-pointer transition">
-            Seleccionar archivo
+          <p className="text-muted-foreground text-xs">o</p>
+          <label className="mt-3 inline-block cursor-pointer">
+            <Button asChild>
+              <span>Seleccionar archivo</span>
+            </Button>
             <input
               type="file"
               accept="image/*,.pdf"
@@ -1068,7 +1079,7 @@ function UploadModal({
             />
           </label>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

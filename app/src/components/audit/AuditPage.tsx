@@ -7,7 +7,6 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  X,
   Eye,
   Filter,
   Calendar,
@@ -15,6 +14,31 @@ import {
 } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
 import type { AuditEvent } from '@/types/database';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const PAGE_SIZE = 25;
 
@@ -195,11 +219,11 @@ export default function AuditPage() {
     if (action.startsWith('bulk_')) return 'bg-purple-500/10 text-purple-400';
     if (action.includes('reversal')) return 'bg-yellow-500/10 text-yellow-400';
     if (action.includes('updated')) return 'bg-cyan-500/10 text-cyan-400';
-    return 'bg-slate-500/10 text-slate-400';
+    return 'bg-muted/50 text-muted-foreground';
   }
 
   function getEntityColor(entity: string) {
-    return ENTITY_COLORS[entity] || 'bg-slate-500/10 text-slate-400';
+    return ENTITY_COLORS[entity] || 'bg-muted/50 text-muted-foreground';
   }
 
   async function exportCSV() {
@@ -250,231 +274,215 @@ export default function AuditPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Shield className="w-6 h-6 text-purple-400" />
             Auditoría
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-muted-foreground mt-1">
             Registro inmutable de acciones del sistema
           </p>
         </div>
-        <button
-          onClick={exportCSV}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition"
-        >
+        <Button variant="outline" onClick={exportCSV}>
           <Download className="w-4 h-4" />
           Exportar CSV
-        </button>
+        </Button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-        <Filter className="w-4 h-4 text-slate-400" />
+      <Card className="py-0">
+        <CardContent className="flex flex-wrap items-center gap-3 py-4">
+          <Filter className="w-4 h-4 text-muted-foreground" />
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Buscar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 w-48"
-          />
-        </div>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Buscar..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 w-48"
+            />
+          </div>
 
-        {/* Action filter */}
-        <select
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="">Todas las acciones</option>
-          {actionOptions.map((a) => (
-            <option key={a} value={a}>
-              {ACTION_LABELS[a] || a}
-            </option>
-          ))}
-        </select>
-
-        {/* Entity filter */}
-        <select
-          value={entityFilter}
-          onChange={(e) => setEntityFilter(e.target.value)}
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="">Todas las entidades</option>
-          {entityOptions.map((e) => (
-            <option key={e} value={e}>
-              {ENTITY_LABELS[e] || e}
-            </option>
-          ))}
-        </select>
-
-        {/* Date range */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-slate-400" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-          <span className="text-slate-500">—</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        {(search || actionFilter || entityFilter || dateFrom || dateTo) && (
-          <button
-            onClick={() => {
-              setSearch('');
-              setActionFilter('');
-              setEntityFilter('');
-              setDateFrom('');
-              setDateTo('');
-            }}
-            className="text-xs text-slate-400 hover:text-white underline"
+          {/* Action filter */}
+          <Select
+            value={actionFilter || '_none'}
+            onValueChange={(val) => setActionFilter(val === '_none' ? '' : val)}
           >
-            Limpiar filtros
-          </button>
-        )}
-      </div>
+            <SelectTrigger className="w-auto min-w-[180px]">
+              <SelectValue placeholder="Todas las acciones" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Todas las acciones</SelectItem>
+              {actionOptions.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {ACTION_LABELS[a] || a}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Entity filter */}
+          <Select
+            value={entityFilter || '_none'}
+            onValueChange={(val) => setEntityFilter(val === '_none' ? '' : val)}
+          >
+            <SelectTrigger className="w-auto min-w-[180px]">
+              <SelectValue placeholder="Todas las entidades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">Todas las entidades</SelectItem>
+              {entityOptions.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {ENTITY_LABELS[e] || e}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Date range */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-auto"
+            />
+            <span className="text-muted-foreground">—</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-auto"
+            />
+          </div>
+
+          {(search || actionFilter || entityFilter || dateFrom || dateTo) && (
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => {
+                setSearch('');
+                setActionFilter('');
+                setEntityFilter('');
+                setDateFrom('');
+                setDateTo('');
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Results count */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           {totalCount} evento{totalCount !== 1 ? 's' : ''} encontrado
           {totalCount !== 1 ? 's' : ''}
         </p>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  Fecha
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  Usuario
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  Acción
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  Entidad
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  ID
-                </th>
-                <th className="text-left p-4 text-slate-400 font-medium">
-                  Resumen
-                </th>
-                <th className="text-right p-4 text-slate-400 font-medium">
-                  Detalle
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                      Cargando eventos...
-                    </div>
-                  </td>
-                </tr>
-              ) : events.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
-                    No hay eventos registrados
-                  </td>
-                </tr>
-              ) : (
-                events.map((event) => {
-                  const summary = buildSummary(event);
-                  return (
-                    <tr
-                      key={event.id}
-                      className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer"
-                      onClick={() => setSelectedEvent(event)}
-                    >
-                      <td className="p-4 text-slate-300 whitespace-nowrap">
-                        {formatDateTime(event.created_at)}
-                      </td>
-                      <td className="p-4 text-white">
-                        {(event.user as unknown as { full_name: string })
-                          ?.full_name || '—'}
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={cn(
-                            'px-2 py-1 rounded text-xs font-medium',
-                            getActionColor(event.action)
-                          )}
-                        >
-                          {ACTION_LABELS[event.action] || event.action}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={cn(
-                            'px-2 py-1 rounded text-xs font-medium',
-                            getEntityColor(event.entity_type)
-                          )}
-                        >
-                          {ENTITY_LABELS[event.entity_type] ||
-                            event.entity_type}
-                        </span>
-                      </td>
-                      <td className="p-4 text-slate-500 text-xs font-mono">
-                        {event.entity_id?.slice(0, 8) || '—'}
-                      </td>
-                      <td className="p-4 text-slate-400 text-xs max-w-xs truncate">
-                        {summary}
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedEvent(event);
-                          }}
-                          className="p-1.5 hover:bg-slate-700 rounded-lg transition text-slate-400 hover:text-white"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Card className="py-0 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="p-4">Fecha</TableHead>
+              <TableHead className="p-4">Usuario</TableHead>
+              <TableHead className="p-4">Acción</TableHead>
+              <TableHead className="p-4">Entidad</TableHead>
+              <TableHead className="p-4">ID</TableHead>
+              <TableHead className="p-4">Resumen</TableHead>
+              <TableHead className="p-4 text-right">Detalle</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="p-8 text-center text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    Cargando eventos...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : events.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="p-8 text-center text-muted-foreground">
+                  No hay eventos registrados
+                </TableCell>
+              </TableRow>
+            ) : (
+              events.map((event) => {
+                const summary = buildSummary(event);
+                return (
+                  <TableRow
+                    key={event.id}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedEvent(event)}
+                  >
+                    <TableCell className="p-4 text-muted-foreground whitespace-nowrap">
+                      {formatDateTime(event.created_at)}
+                    </TableCell>
+                    <TableCell className="p-4 text-foreground">
+                      {(event.user as unknown as { full_name: string })
+                        ?.full_name || '—'}
+                    </TableCell>
+                    <TableCell className="p-4">
+                      <Badge className={cn('rounded', getActionColor(event.action))}>
+                        {ACTION_LABELS[event.action] || event.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="p-4">
+                      <Badge className={cn('rounded', getEntityColor(event.entity_type))}>
+                        {ENTITY_LABELS[event.entity_type] ||
+                          event.entity_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="p-4 text-muted-foreground text-xs font-mono">
+                      {event.entity_id?.slice(0, 8) || '—'}
+                    </TableCell>
+                    <TableCell className="p-4 text-muted-foreground text-xs max-w-xs truncate">
+                      {summary}
+                    </TableCell>
+                    <TableCell className="p-4 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEvent(event);
+                        }}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </Card>
 
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Página {page + 1} de {totalPages}
           </p>
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white rounded-lg transition"
             >
               <ChevronLeft className="w-4 h-4" />
-            </button>
+            </Button>
             {/* Page numbers */}
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pageNum: number;
@@ -488,38 +496,129 @@ export default function AuditPage() {
                 pageNum = page - 2 + i;
               }
               return (
-                <button
+                <Button
                   key={pageNum}
+                  variant={pageNum === page ? 'default' : 'outline'}
+                  size="icon"
                   onClick={() => setPage(pageNum)}
-                  className={cn(
-                    'w-8 h-8 text-sm rounded-lg transition',
-                    pageNum === page
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
-                  )}
                 >
                   {pageNum + 1}
-                </button>
+                </Button>
               );
             })}
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white rounded-lg transition"
             >
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* Detail Modal */}
-      {selectedEvent && (
-        <EventDetailModal
-          event={selectedEvent}
-          onClose={() => setSelectedEvent(null)}
-        />
-      )}
+      <Dialog
+        open={!!selectedEvent}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEvent(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-purple-400" />
+              Detalle del Evento
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedEvent && (
+            <div className="overflow-y-auto space-y-5">
+              {/* Event info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Fecha</p>
+                  <p className="text-foreground text-sm">
+                    {formatDateTime(selectedEvent.created_at)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Usuario</p>
+                  <p className="text-foreground text-sm">
+                    {(selectedEvent.user as unknown as { full_name: string })?.full_name ||
+                      '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Acción</p>
+                  <p className="text-foreground text-sm">
+                    {ACTION_LABELS[selectedEvent.action] || selectedEvent.action}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Entidad</p>
+                  <p className="text-foreground text-sm">
+                    {ENTITY_LABELS[selectedEvent.entity_type] || selectedEvent.entity_type}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground mb-1">ID Entidad</p>
+                  <p className="text-foreground text-sm font-mono">
+                    {selectedEvent.entity_id || '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Before data */}
+              {selectedEvent.before_data && Object.keys(selectedEvent.before_data).length > 0 && (
+                <div>
+                  <p className="text-xs text-red-400 font-medium mb-2 flex items-center gap-1">
+                    ← Datos anteriores
+                  </p>
+                  <div className="bg-red-500/5 border border-red-900/30 rounded-lg p-4">
+                    <JsonViewer data={selectedEvent.before_data} variant="before" />
+                  </div>
+                </div>
+              )}
+
+              {/* After data */}
+              {selectedEvent.after_data && Object.keys(selectedEvent.after_data).length > 0 && (
+                <div>
+                  <p className="text-xs text-green-400 font-medium mb-2 flex items-center gap-1">
+                    → Datos posteriores
+                  </p>
+                  <div className="bg-green-500/5 border border-green-900/30 rounded-lg p-4">
+                    <JsonViewer data={selectedEvent.after_data} variant="after" />
+                  </div>
+                </div>
+              )}
+
+              {/* Metadata */}
+              {selectedEvent.metadata && Object.keys(selectedEvent.metadata).length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium mb-2">
+                    Metadata
+                  </p>
+                  <div className="bg-muted/50 border border-border rounded-lg p-4">
+                    <JsonViewer data={selectedEvent.metadata} variant="neutral" />
+                  </div>
+                </div>
+              )}
+
+              {/* IP */}
+              {selectedEvent.ip_address && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">IP Address</p>
+                  <p className="text-muted-foreground text-sm font-mono">
+                    {selectedEvent.ip_address}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -547,124 +646,6 @@ function buildSummary(event: AuditEvent): string {
   return '—';
 }
 
-function EventDetailModal({
-  event,
-  onClose,
-}: {
-  event: AuditEvent;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl m-4 max-h-[80vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Shield className="w-5 h-5 text-purple-400" />
-            Detalle del Evento
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-400"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-5 overflow-y-auto space-y-5">
-          {/* Event info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Fecha</p>
-              <p className="text-white text-sm">
-                {formatDateTime(event.created_at)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Usuario</p>
-              <p className="text-white text-sm">
-                {(event.user as unknown as { full_name: string })?.full_name ||
-                  '—'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Acción</p>
-              <p className="text-white text-sm">
-                {ACTION_LABELS[event.action] || event.action}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Entidad</p>
-              <p className="text-white text-sm">
-                {ENTITY_LABELS[event.entity_type] || event.entity_type}
-              </p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-slate-500 mb-1">ID Entidad</p>
-              <p className="text-white text-sm font-mono">
-                {event.entity_id || '—'}
-              </p>
-            </div>
-          </div>
-
-          {/* Before data */}
-          {event.before_data && Object.keys(event.before_data).length > 0 && (
-            <div>
-              <p className="text-xs text-red-400 font-medium mb-2 flex items-center gap-1">
-                ← Datos anteriores
-              </p>
-              <div className="bg-red-500/5 border border-red-900/30 rounded-lg p-4">
-                <JsonViewer data={event.before_data} variant="before" />
-              </div>
-            </div>
-          )}
-
-          {/* After data */}
-          {event.after_data && Object.keys(event.after_data).length > 0 && (
-            <div>
-              <p className="text-xs text-green-400 font-medium mb-2 flex items-center gap-1">
-                → Datos posteriores
-              </p>
-              <div className="bg-green-500/5 border border-green-900/30 rounded-lg p-4">
-                <JsonViewer data={event.after_data} variant="after" />
-              </div>
-            </div>
-          )}
-
-          {/* Metadata */}
-          {event.metadata && Object.keys(event.metadata).length > 0 && (
-            <div>
-              <p className="text-xs text-slate-400 font-medium mb-2">
-                Metadata
-              </p>
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                <JsonViewer data={event.metadata} variant="neutral" />
-              </div>
-            </div>
-          )}
-
-          {/* IP */}
-          {event.ip_address && (
-            <div>
-              <p className="text-xs text-slate-500 mb-1">IP Address</p>
-              <p className="text-slate-400 text-sm font-mono">
-                {event.ip_address}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function JsonViewer({
   data,
   variant,
@@ -677,14 +658,14 @@ function JsonViewer({
       ? 'text-red-300'
       : variant === 'after'
       ? 'text-green-300'
-      : 'text-slate-300';
+      : 'text-muted-foreground';
 
   return (
     <div className="space-y-1.5 text-xs font-mono">
       {Object.entries(data).map(([key, value]) => (
         <div key={key} className="flex items-start gap-2">
           <span className={cn('font-medium shrink-0', keyColor)}>{key}:</span>
-          <span className="text-slate-400 break-all">
+          <span className="text-muted-foreground break-all">
             {typeof value === 'object' && value !== null
               ? JSON.stringify(value, null, 2)
               : String(value ?? 'null')}

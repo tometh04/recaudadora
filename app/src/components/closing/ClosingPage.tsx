@@ -18,6 +18,22 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+
 interface DaySummary {
   totalReceived: number;
   totalVerified: number;
@@ -254,187 +270,202 @@ export default function ClosingPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <CalendarCheck className="w-6 h-6 text-blue-400" />
           Cierre Diario
         </h1>
-        <p className="text-slate-400 mt-1">Resumen y cierre de operaciones por dia</p>
+        <p className="text-muted-foreground mt-1">Resumen y cierre de operaciones por dia</p>
       </div>
 
       {/* Date Selector */}
       <div className="flex items-center gap-3">
-        <button onClick={() => navigateDate(-1)} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">
+        <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
           <ChevronLeft className="w-5 h-5" />
-        </button>
-        <input
+        </Button>
+        <Input
           type="date"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-auto"
         />
-        <button onClick={() => navigateDate(1)} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">
+        <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
           <ChevronRight className="w-5 h-5" />
-        </button>
+        </Button>
         {isToday && (
-          <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-lg font-medium">Hoy</span>
+          <Badge variant="secondary" className="bg-blue-500/10 text-blue-400">Hoy</Badge>
         )}
         {existingClosing && (
-          <span className="px-2.5 py-1 bg-green-500/10 text-green-400 text-xs rounded-lg font-medium flex items-center gap-1">
+          <Badge variant="secondary" className="bg-green-500/10 text-green-400 flex items-center gap-1">
             <Lock className="w-3 h-3" />
             Cerrado
-          </span>
+          </Badge>
         )}
         {!existingClosing && !isFuture && (
-          <span className="px-2.5 py-1 bg-orange-500/10 text-orange-400 text-xs rounded-lg font-medium flex items-center gap-1">
+          <Badge variant="secondary" className="bg-orange-500/10 text-orange-400 flex items-center gap-1">
             <Unlock className="w-3 h-3" />
             Abierto
-          </span>
+          </Badge>
         )}
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-32">
-          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       ) : summary ? (
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4 text-blue-400" />
-                <span className="text-slate-400 text-xs">Recibidos</span>
-              </div>
-              <p className="text-xl font-bold text-white">{summary.totalReceived}</p>
-              <p className="text-xs text-slate-500">{formatCurrency(summary.amountReceived)}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4 text-green-400" />
-                <span className="text-slate-400 text-xs">Verificados</span>
-              </div>
-              <p className="text-xl font-bold text-white">{summary.totalVerified}</p>
-              <p className="text-xs text-slate-500">{formatCurrency(summary.amountVerified)}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <XCircle className="w-4 h-4 text-red-400" />
-                <span className="text-slate-400 text-xs">Rechazados</span>
-              </div>
-              <p className="text-xl font-bold text-white">{summary.totalRejected}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-4 h-4 text-yellow-400" />
-                <span className="text-slate-400 text-xs">Comisiones</span>
-              </div>
-              <p className="text-xl font-bold text-white">{formatCurrency(summary.amountCommissions)}</p>
-            </div>
+            <Card className="py-4">
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  <span className="text-muted-foreground text-xs">Recibidos</span>
+                </div>
+                <p className="text-xl font-bold text-foreground">{summary.totalReceived}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(summary.amountReceived)}</p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  <span className="text-muted-foreground text-xs">Verificados</span>
+                </div>
+                <p className="text-xl font-bold text-foreground">{summary.totalVerified}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(summary.amountVerified)}</p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <XCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-muted-foreground text-xs">Rechazados</span>
+                </div>
+                <p className="text-xl font-bold text-foreground">{summary.totalRejected}</p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-yellow-400" />
+                  <span className="text-muted-foreground text-xs">Comisiones</span>
+                </div>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(summary.amountCommissions)}</p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Pending alert */}
           {summary.pendingCount > 0 && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-orange-500/5 border border-orange-500/20 rounded-xl">
+            <Alert className="border-orange-500/20 bg-orange-500/5">
               <Clock className="w-5 h-5 text-orange-400" />
-              <p className="text-sm text-orange-300">
+              <AlertDescription className="text-orange-300">
                 <span className="font-bold">{summary.pendingCount}</span> comprobantes pendientes de verificacion.
-              </p>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Close day action */}
           {!existingClosing && !isFuture && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-              <h3 className="text-white font-semibold">Cerrar este dia</h3>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Notas (opcional)</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Observaciones del dia..."
-                  rows={3}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-600"
-                />
-              </div>
-              <button
-                onClick={handleClose}
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-50"
-              >
-                {saving ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                Cerrar dia {formatDate(selectedDate)}
-              </button>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Cerrar este dia</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Notas (opcional)</Label>
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Observaciones del dia..."
+                    rows={3}
+                  />
+                </div>
+                <Button
+                  onClick={handleClose}
+                  disabled={saving}
+                  className="bg-green-600 hover:bg-green-500 text-white"
+                >
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Cerrar dia {formatDate(selectedDate)}
+                </Button>
+              </CardContent>
+            </Card>
           )}
 
           {existingClosing?.notes && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">Notas del cierre:</p>
-              <p className="text-sm text-white">{existingClosing.notes}</p>
-            </div>
+            <Card>
+              <CardContent>
+                <p className="text-xs text-muted-foreground mb-1">Notas del cierre:</p>
+                <p className="text-sm text-foreground">{existingClosing.notes}</p>
+              </CardContent>
+            </Card>
           )}
         </>
       ) : (
-        <p className="text-slate-500 text-center py-8">No hay datos para esta fecha.</p>
+        <p className="text-muted-foreground text-center py-8">No hay datos para esta fecha.</p>
       )}
 
       {/* History */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-slate-800">
-          <h3 className="text-white font-semibold flex items-center gap-2">
-            <CalendarCheck className="w-4 h-4 text-slate-400" />
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="flex items-center gap-2">
+            <CalendarCheck className="w-4 h-4 text-muted-foreground" />
             Historial de Cierres
-          </h3>
-        </div>
-        {closings.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">No hay cierres registrados</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-800/30 text-slate-400 text-xs">
-                  <th className="text-left px-4 py-2.5">Fecha</th>
-                  <th className="text-center px-4 py-2.5">Recibidos</th>
-                  <th className="text-center px-4 py-2.5">Verificados</th>
-                  <th className="text-center px-4 py-2.5">Rechazados</th>
-                  <th className="text-right px-4 py-2.5">Monto Verif.</th>
-                  <th className="text-right px-4 py-2.5">Comisiones</th>
-                  <th className="text-center px-4 py-2.5">Pendientes</th>
-                  <th className="text-left px-4 py-2.5">Notas</th>
-                </tr>
-              </thead>
-              <tbody>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {closings.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center py-8">No hay cierres registrados</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-left">Fecha</TableHead>
+                  <TableHead className="text-center">Recibidos</TableHead>
+                  <TableHead className="text-center">Verificados</TableHead>
+                  <TableHead className="text-center">Rechazados</TableHead>
+                  <TableHead className="text-right">Monto Verif.</TableHead>
+                  <TableHead className="text-right">Comisiones</TableHead>
+                  <TableHead className="text-center">Pendientes</TableHead>
+                  <TableHead className="text-left">Notas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {closings.map((c) => (
-                  <tr
+                  <TableRow
                     key={c.id}
-                    className="border-t border-slate-800/50 hover:bg-slate-800/30 transition cursor-pointer"
+                    className="cursor-pointer"
                     onClick={() => setSelectedDate(c.closing_date)}
                   >
-                    <td className="px-4 py-3 text-white font-medium">{formatDate(c.closing_date)}</td>
-                    <td className="px-4 py-3 text-center text-slate-300">{c.total_received}</td>
-                    <td className="px-4 py-3 text-center text-green-400">{c.total_verified}</td>
-                    <td className="px-4 py-3 text-center text-red-400">{c.total_rejected}</td>
-                    <td className="px-4 py-3 text-right text-white">{formatCurrency(c.amount_verified)}</td>
-                    <td className="px-4 py-3 text-right text-yellow-400">{formatCurrency(c.amount_commissions)}</td>
-                    <td className="px-4 py-3 text-center">
+                    <TableCell className="font-medium text-foreground">{formatDate(c.closing_date)}</TableCell>
+                    <TableCell className="text-center text-muted-foreground">{c.total_received}</TableCell>
+                    <TableCell className="text-center text-green-400">{c.total_verified}</TableCell>
+                    <TableCell className="text-center text-red-400">{c.total_rejected}</TableCell>
+                    <TableCell className="text-right text-foreground">{formatCurrency(c.amount_verified)}</TableCell>
+                    <TableCell className="text-right text-yellow-400">{formatCurrency(c.amount_commissions)}</TableCell>
+                    <TableCell className="text-center">
                       {c.pending_count > 0 ? (
-                        <span className="px-2 py-0.5 bg-orange-500/10 text-orange-400 text-xs rounded">{c.pending_count}</span>
+                        <Badge variant="secondary" className="bg-orange-500/10 text-orange-400">
+                          {c.pending_count}
+                        </Badge>
                       ) : (
                         <span className="text-green-400 text-xs">0</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs truncate max-w-[200px]">{c.notes || '—'}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs truncate max-w-[200px]">{c.notes || '\u2014'}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

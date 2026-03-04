@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import Sidebar from './Sidebar';
 import ToastContainer from './ToastContainer';
 import CommandPalette from './CommandPalette';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 import { useAppStore } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
 import { useRealtimeNotifications } from '@/lib/realtime';
@@ -16,7 +18,7 @@ export default function DashboardShell({
   children: React.ReactNode;
   initialProfile: Profile | null;
 }) {
-  const { setProfile, sidebarOpen } = useAppStore();
+  const { setProfile } = useAppStore();
 
   useEffect(() => {
     setProfile(initialProfile);
@@ -39,17 +41,16 @@ export default function DashboardShell({
   useRealtimeNotifications();
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <Sidebar />
-      <main
-        className={`flex-1 transition-all duration-300 ${
-          sidebarOpen ? 'ml-0' : 'ml-0'
-        }`}
-      >
-        <div className="p-6 max-w-7xl mx-auto">{children}</div>
-      </main>
-      <ToastContainer />
-      <CommandPalette />
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 transition-all duration-300">
+          <div className="p-6 max-w-7xl mx-auto">{children}</div>
+        </main>
+        <ToastContainer />
+        <CommandPalette />
+        <Toaster theme="dark" position="bottom-right" />
+      </div>
+    </TooltipProvider>
   );
 }

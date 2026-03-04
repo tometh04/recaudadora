@@ -10,10 +10,37 @@ import {
   CheckCircle2,
   Eye,
   ExternalLink,
-  X,
   Filter,
 } from 'lucide-react';
 import type { ExceptionType } from '@/types/database';
+
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 interface Exception {
   id: string;
@@ -185,16 +212,16 @@ export default function ExceptionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <AlertOctagon className="w-6 h-6 text-orange-400" />
             Excepciones
             {openCount > 0 && (
-              <span className="ml-2 px-2 py-0.5 bg-red-500/10 text-red-400 text-sm rounded-lg font-medium">
+              <Badge variant="destructive" className="ml-2 text-sm">
                 {openCount} abiertas
-              </span>
+              </Badge>
             )}
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-muted-foreground mt-1">
             Anomalias y situaciones que requieren atencion
           </p>
         </div>
@@ -202,82 +229,82 @@ export default function ExceptionsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 bg-slate-900/50 border border-slate-800 rounded-lg p-0.5">
+        <div className="flex gap-1 bg-muted rounded-lg p-0.5">
           {(['todos', 'abiertas', 'resueltas'] as const).map((s) => (
-            <button
+            <Button
               key={s}
+              variant={statusFilter === s ? 'default' : 'ghost'}
+              size="sm"
               onClick={() => setStatusFilter(s)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition capitalize',
-                statusFilter === s ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-              )}
+              className="capitalize text-xs"
             >
               {s}
-            </button>
+            </Button>
           ))}
         </div>
 
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as ExceptionType | 'todos')}
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="todos">Todos los tipos</option>
-          {Object.entries(EXCEPTION_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as ExceptionType | 'todos')}>
+          <SelectTrigger className="w-auto text-xs">
+            <SelectValue placeholder="Todos los tipos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los tipos</SelectItem>
+            {Object.entries(EXCEPTION_LABELS).map(([k, v]) => (
+              <SelectItem key={k} value={k}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
             type="text"
             placeholder="Buscar..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="pl-10 text-xs"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 text-xs">
-                <th className="text-left p-4">Tipo</th>
-                <th className="text-left p-4">Descripcion</th>
-                <th className="text-left p-4">Comprobante</th>
-                <th className="text-left p-4">Cliente</th>
-                <th className="text-right p-4">Monto</th>
-                <th className="text-left p-4">Fecha</th>
-                <th className="text-center p-4">Estado</th>
-                <th className="text-right p-4">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-left">Tipo</TableHead>
+                <TableHead className="text-left">Descripcion</TableHead>
+                <TableHead className="text-left">Comprobante</TableHead>
+                <TableHead className="text-left">Cliente</TableHead>
+                <TableHead className="text-right">Monto</TableHead>
+                <TableHead className="text-left">Fecha</TableHead>
+                <TableHead className="text-center">Estado</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                <TableRow>
+                  <TableCell colSpan={8} className="p-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                       Cargando...
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                <TableRow>
+                  <TableCell colSpan={8} className="p-8 text-center text-muted-foreground">
                     {statusFilter === 'abiertas' ? 'No hay excepciones abiertas' : 'No hay excepciones'}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((exc) => (
-                  <tr
+                  <TableRow
                     key={exc.id}
                     className={cn(
-                      'border-b border-slate-800/50 hover:bg-slate-800/30 transition cursor-pointer',
+                      'cursor-pointer',
                       exc.is_resolved && 'opacity-60'
                     )}
                     onClick={() => {
@@ -285,81 +312,75 @@ export default function ExceptionsPage() {
                       setResolutionNotes(exc.resolution_notes || '');
                     }}
                   >
-                    <td className="p-4">
-                      <span className={cn('px-2 py-1 rounded-md text-xs font-medium', EXCEPTION_COLORS[exc.exception_type])}>
+                    <TableCell>
+                      <Badge variant="secondary" className={cn('text-xs', EXCEPTION_COLORS[exc.exception_type])}>
                         {EXCEPTION_LABELS[exc.exception_type]}
-                      </span>
-                    </td>
-                    <td className="p-4 text-slate-300 text-xs max-w-[250px] truncate">{exc.description}</td>
-                    <td className="p-4 text-white font-mono text-xs">{exc.inbox_item?.reference_number || '—'}</td>
-                    <td className="p-4 text-slate-300 text-xs">{exc.inbox_item?.client?.name || '—'}</td>
-                    <td className="p-4 text-right text-white font-mono text-xs">
-                      {exc.inbox_item?.amount ? formatCurrency(exc.inbox_item.amount) : '—'}
-                    </td>
-                    <td className="p-4 text-slate-500 text-xs">{formatDateTime(exc.created_at)}</td>
-                    <td className="p-4 text-center">
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs max-w-[250px] truncate">{exc.description}</TableCell>
+                    <TableCell className="text-foreground font-mono text-xs">{exc.inbox_item?.reference_number || '\u2014'}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{exc.inbox_item?.client?.name || '\u2014'}</TableCell>
+                    <TableCell className="text-right text-foreground font-mono text-xs">
+                      {exc.inbox_item?.amount ? formatCurrency(exc.inbox_item.amount) : '\u2014'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{formatDateTime(exc.created_at)}</TableCell>
+                    <TableCell className="text-center">
                       {exc.is_resolved ? (
-                        <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded">Resuelta</span>
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-400">Resuelta</Badge>
                       ) : (
-                        <span className="px-2 py-0.5 bg-red-500/10 text-red-400 text-xs rounded">Abierta</span>
+                        <Badge variant="secondary" className="bg-red-500/10 text-red-400">Abierta</Badge>
                       )}
-                    </td>
-                    <td className="p-4 text-right">
-                      <button className="p-1.5 text-slate-400 hover:text-white transition">
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground">
                         <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Detail Modal */}
-      {selectedExc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg m-4 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <AlertOctagon className="w-5 h-5 text-orange-400" />
-                <h2 className="text-lg font-semibold text-white">Detalle de Excepcion</h2>
-              </div>
-              <button
-                onClick={() => setSelectedExc(null)}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Dialog open={!!selectedExc} onOpenChange={(open) => { if (!open) setSelectedExc(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <AlertOctagon className="w-5 h-5 text-orange-400" />
+              Detalle de Excepcion
+            </DialogTitle>
+          </DialogHeader>
 
-            <div className="p-5 space-y-4">
+          {selectedExc && (
+            <div className="space-y-4">
               <div>
-                <span className={cn('px-2.5 py-1 rounded-lg text-sm font-medium', EXCEPTION_COLORS[selectedExc.exception_type])}>
+                <Badge variant="secondary" className={cn('text-sm', EXCEPTION_COLORS[selectedExc.exception_type])}>
                   {EXCEPTION_LABELS[selectedExc.exception_type]}
-                </span>
+                </Badge>
               </div>
 
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-slate-400 mb-1">Descripcion</p>
-                <p className="text-sm text-white">{selectedExc.description}</p>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Descripcion</p>
+                <p className="text-sm text-foreground">{selectedExc.description}</p>
               </div>
 
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-slate-400 mb-1">Que significa</p>
-                <p className="text-xs text-slate-300">{EXCEPTION_DESCRIPTIONS[selectedExc.exception_type]}</p>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Que significa</p>
+                <p className="text-xs text-muted-foreground">{EXCEPTION_DESCRIPTIONS[selectedExc.exception_type]}</p>
               </div>
 
               {selectedExc.inbox_item && (
-                <div className="bg-slate-800/50 rounded-lg p-3 space-y-1">
-                  <p className="text-xs text-slate-400">Comprobante relacionado</p>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">Comprobante relacionado</p>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-white">
+                      <p className="text-sm text-foreground">
                         {selectedExc.inbox_item.reference_number || selectedExc.inbox_item.id.slice(0, 8)}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         {selectedExc.inbox_item.client?.name} · {selectedExc.inbox_item.amount ? formatCurrency(selectedExc.inbox_item.amount) : ''}
                       </p>
                     </div>
@@ -370,7 +391,7 @@ export default function ExceptionsPage() {
                 </div>
               )}
 
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-muted-foreground">
                 Creada: {formatDateTime(selectedExc.created_at)}
               </div>
 
@@ -381,34 +402,33 @@ export default function ExceptionsPage() {
                     Resuelta {selectedExc.resolved_at ? `el ${formatDateTime(selectedExc.resolved_at)}` : ''}
                   </p>
                   {selectedExc.resolution_notes && (
-                    <p className="text-sm text-white">{selectedExc.resolution_notes}</p>
+                    <p className="text-sm text-foreground">{selectedExc.resolution_notes}</p>
                   )}
                 </div>
               ) : (
                 <div className="space-y-3 pt-2">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Notas de resolucion</label>
-                    <textarea
+                  <div className="space-y-2">
+                    <Label>Notas de resolucion</Label>
+                    <Textarea
                       value={resolutionNotes}
                       onChange={(e) => setResolutionNotes(e.target.value)}
                       placeholder="Como se resolvio esta excepcion..."
                       rows={3}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-600"
                     />
                   </div>
-                  <button
+                  <Button
                     onClick={() => handleResolve(selectedExc.id)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition"
+                    className="w-full bg-green-600 hover:bg-green-500 text-white"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     Marcar como Resuelta
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

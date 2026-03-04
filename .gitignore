@@ -27,3 +27,4 @@ app/build/
 # Misc
 *.pem
 *.log
+.vercel

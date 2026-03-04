@@ -17,10 +17,14 @@ import {
   PanelLeftClose,
   PanelLeft,
   MessageSquare,
+  CalendarCheck,
+  Settings,
+  AlertOctagon,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { isDemoMode } from '@/lib/use-demo';
+import { canAccessRoute } from '@/lib/permissions';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, badge: false },
@@ -30,7 +34,10 @@ const navigation = [
   { name: 'Cuentas', href: '/accounts', icon: Landmark, badge: false },
   { name: 'Conciliacion', href: '/reconciliation', icon: GitCompareArrows, badge: false },
   { name: 'Cuenta Corriente', href: '/ledger', icon: BookOpen, badge: false },
+  { name: 'Cierre Diario', href: '/closing', icon: CalendarCheck, badge: false },
+  { name: 'Excepciones', href: '/exceptions', icon: AlertOctagon, badge: false },
   { name: 'Auditoria', href: '/audit', icon: Shield, badge: false },
+  { name: 'Configuracion', href: '/settings', icon: Settings, badge: false },
 ];
 
 export default function Sidebar() {
@@ -101,7 +108,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {navigation.map((item) => {
+        {navigation.filter((item) => canAccessRoute(profile?.role, item.href)).map((item) => {
           const isActive =
             item.href === '/'
               ? pathname === '/'

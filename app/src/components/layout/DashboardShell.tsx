@@ -2,8 +2,11 @@
 
 import { useEffect } from 'react';
 import Sidebar from './Sidebar';
+import ToastContainer from './ToastContainer';
+import CommandPalette from './CommandPalette';
 import { useAppStore } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
+import { useRealtimeNotifications } from '@/lib/realtime';
 import type { Profile } from '@/types/database';
 
 export default function DashboardShell({
@@ -32,6 +35,9 @@ export default function DashboardShell({
     return () => subscription.unsubscribe();
   }, [setProfile]);
 
+  // Subscribe to realtime notifications
+  useRealtimeNotifications();
+
   return (
     <div className="flex min-h-screen bg-slate-950">
       <Sidebar />
@@ -42,6 +48,8 @@ export default function DashboardShell({
       >
         <div className="p-6 max-w-7xl mx-auto">{children}</div>
       </main>
+      <ToastContainer />
+      <CommandPalette />
     </div>
   );
 }

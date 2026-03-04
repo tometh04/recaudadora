@@ -78,6 +78,69 @@ export default function InboxPage() {
     setSelectedIds(new Set());
   }, [statusFilter, search]);
 
+  // Auto-apply commission when verifying a comprobante
+  async function applyCommission(itemId: string, clientId: string | null, amount: number | null) {
+    if (!amount || amount <= 0) return;
+    if (isDemoMode()) return;
+
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Find commission rule: client-specific first, then general (client_id IS NULL)
+    let rule: { percentage: number; fixed_fee: number; min_amount: number } | null = null;
+
+    if (clientId) {
+      const { data } = await supabase
+        .from('commission_rules')
+        .select('percentage, fixed_fee, min_amount')
+        .eq('client_id', clientId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (data) rule = data;
+    }
+
+    if (!rule) {
+      const { data } = await supabase
+        .from('commission_rules')
+        .select('percentage, fixed_fee, min_amount')
+        .is('client_id', null)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (data) rule = data;
+    }
+
+    if (!rule) return;
+    if (amount < rule.min_amount) return;
+
+    const commission = Math.max(amount * rule.percentage / 100, rule.fixed_fee);
+    if (commission <= 0) return;
+
+    // Create ledger entry for commission (debit)
+    if (clientId) {
+      await supabase.from('ledger_entries').insert({
+        client_id: clientId,
+        entry_type: 'debito',
+        category: 'comision',
+        amount: commission,
+        description: `Comision ${rule.percentage}% sobre deposito de ${formatCurrency(amount)}`,
+        inbox_item_id: itemId,
+        created_by: user?.id,
+      });
+
+      // Audit event
+      await supabase.from('audit_events').insert({
+        user_id: user?.id,
+        action: 'commission_applied',
+        entity_type: 'ledger_entries',
+        entity_id: itemId,
+        after_data: { client_id: clientId, amount, commission, percentage: rule.percentage },
+      });
+    }
+  }
+
   async function updateItem(id: string, updates: Partial<InboxItem>) {
     if (isDemoMode()) {
       setItems((prev) =>
@@ -88,6 +151,33 @@ export default function InboxPage() {
 
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
+
+    // If verifying, also create credit ledger entry + commission
+    if (updates.status === 'verificado') {
+      const item = items.find((i) => i.id === id);
+      if (item) {
+        const cId = (updates as any).client_id ?? item.client_id;
+        const amt = (updates as any).amount ?? item.amount;
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Create credit ledger entry
+        if (cId && amt && amt > 0) {
+          await supabase.from('ledger_entries').insert({
+            client_id: cId,
+            entry_type: 'credito',
+            category: 'deposito_verificado',
+            amount: amt,
+            description: `Deposito verificado${item.reference_number ? ` - Ref: ${item.reference_number}` : ''}`,
+            inbox_item_id: id,
+            created_by: user?.id,
+          });
+
+          // Apply commission
+          await applyCommission(id, cId, amt);
+        }
+      }
+    }
+
     await supabase.from('inbox_items').update(updates).eq('id', id);
     loadData();
   }
@@ -227,6 +317,23 @@ export default function InboxPage() {
     } else {
       const newStatus = action === 'verificar' ? 'verificado' : 'rechazado';
       await supabase.from('inbox_items').update({ status: newStatus }).in('id', ids);
+
+      // If bulk verifying, create credit ledger entries + commissions
+      if (action === 'verificar') {
+        const verifiedItems = items.filter((i) => selectedIds.has(i.id) && i.client_id && i.amount && i.amount > 0);
+        for (const item of verifiedItems) {
+          await supabase.from('ledger_entries').insert({
+            client_id: item.client_id,
+            entry_type: 'credito',
+            category: 'deposito_verificado',
+            amount: item.amount,
+            description: `Deposito verificado (bulk)${item.reference_number ? ` - Ref: ${item.reference_number}` : ''}`,
+            inbox_item_id: item.id,
+            created_by: user?.id,
+          });
+          await applyCommission(item.id, item.client_id, item.amount);
+        }
+      }
     }
 
     await supabase.from('audit_events').insert({

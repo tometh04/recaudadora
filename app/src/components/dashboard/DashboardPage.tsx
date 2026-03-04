@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { isDemoMode } from '@/lib/use-demo';
 import {
   DEMO_INBOX,
@@ -18,7 +18,27 @@ import {
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
+  BarChart3,
+  PieChartIcon,
+  Activity,
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  AreaChart,
+  Area,
+  CartesianGrid,
+} from 'recharts';
+import { subDays, format, startOfDay, isAfter } from 'date-fns';
+import { es } from 'date-fns/locale';
 import type { ClientBalance, InboxSummary } from '@/types/database';
 
 interface Stats {
@@ -30,6 +50,41 @@ interface Stats {
   montoVerificado: number;
   montoPendiente: number;
 }
+
+interface DailyVolume {
+  date: string;
+  label: string;
+  recibidos: number;
+  verificados: number;
+}
+
+interface CumulativeData {
+  date: string;
+  label: string;
+  monto: number;
+}
+
+const STATUS_CHART_COLORS: Record<string, string> = {
+  recibido: '#3b82f6',
+  ocr_procesando: '#eab308',
+  ocr_listo: '#6366f1',
+  pendiente_verificacion: '#f97316',
+  verificado: '#22c55e',
+  rechazado: '#ef4444',
+  aplicado: '#10b981',
+  duplicado: '#6b7280',
+};
+
+const STATUS_CHART_LABELS: Record<string, string> = {
+  recibido: 'Recibido',
+  ocr_procesando: 'OCR Procesando',
+  ocr_listo: 'OCR Listo',
+  pendiente_verificacion: 'Pend. Verif.',
+  verificado: 'Verificado',
+  rechazado: 'Rechazado',
+  aplicado: 'Aplicado',
+  duplicado: 'Duplicado',
+};
 
 function StatCard({
   title,
@@ -72,6 +127,48 @@ function StatCard({
   );
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function ChartTooltipContent({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
+      <p className="text-slate-300 text-xs mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-sm font-medium" style={{ color: entry.color }}>
+          {entry.name}: {entry.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function AreaTooltipContent({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
+      <p className="text-slate-300 text-xs mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-sm font-medium" style={{ color: entry.color }}>
+          {formatCurrency(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function PieTooltipContent({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
+      <p className="text-sm font-medium" style={{ color: d.payload.fill }}>
+        {d.name}: {d.value}
+      </p>
+    </div>
+  );
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     recibidos: 0,
@@ -84,11 +181,63 @@ export default function DashboardPage() {
   });
   const [balances, setBalances] = useState<ClientBalance[]>([]);
   const [summary, setSummary] = useState<InboxSummary[]>([]);
+  const [dailyVolume, setDailyVolume] = useState<DailyVolume[]>([]);
+  const [cumulativeData, setCumulativeData] = useState<CumulativeData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  function buildDailyVolume(items: { status: string; created_at: string }[]): DailyVolume[] {
+    const today = startOfDay(new Date());
+    const days: DailyVolume[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const day = subDays(today, i);
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const label = format(day, 'dd/MM', { locale: es });
+      const dayItems = items.filter(
+        (it) => format(startOfDay(new Date(it.created_at)), 'yyyy-MM-dd') === dayStr
+      );
+      days.push({
+        date: dayStr,
+        label,
+        recibidos: dayItems.length,
+        verificados: dayItems.filter(
+          (it) => it.status === 'verificado' || it.status === 'aplicado'
+        ).length,
+      });
+    }
+    return days;
+  }
+
+  function buildCumulativeData(
+    items: { status: string; amount: number | null; created_at: string }[]
+  ): CumulativeData[] {
+    const today = startOfDay(new Date());
+    const thirtyDaysAgo = subDays(today, 29);
+    const verified = items
+      .filter(
+        (it) =>
+          (it.status === 'verificado' || it.status === 'aplicado') &&
+          isAfter(new Date(it.created_at), thirtyDaysAgo)
+      )
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    const days: CumulativeData[] = [];
+    let cumulative = 0;
+    for (let i = 29; i >= 0; i--) {
+      const day = subDays(today, i);
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const label = format(day, 'dd/MM', { locale: es });
+      const dayAmount = verified
+        .filter((it) => format(startOfDay(new Date(it.created_at)), 'yyyy-MM-dd') === dayStr)
+        .reduce((s, it) => s + (it.amount || 0), 0);
+      cumulative += dayAmount;
+      days.push({ date: dayStr, label, monto: cumulative });
+    }
+    return days;
+  }
 
   async function loadDashboard() {
     setLoading(true);
@@ -106,7 +255,6 @@ export default function DashboardPage() {
           )
       ).length;
 
-      // Items older than 24h that are still pending
       const cutoff = Date.now() - 24 * 3600000;
       const pendientes24h = items.filter((i) => {
         if (['verificado', 'aplicado', 'rechazado', 'duplicado'].includes(i.status))
@@ -134,6 +282,8 @@ export default function DashboardPage() {
       });
       setBalances(DEMO_CLIENT_BALANCES);
       setSummary(DEMO_INBOX_SUMMARY);
+      setDailyVolume(buildDailyVolume(items));
+      setCumulativeData(buildCumulativeData(items));
       setLoading(false);
       return;
     }
@@ -141,12 +291,13 @@ export default function DashboardPage() {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
 
-    const [inboxRes, balancesRes, summaryRes, pending24hRes] =
+    const [inboxRes, balancesRes, summaryRes, pending24hRes, chartDataRes] =
       await Promise.all([
         supabase.from('inbox_items').select('status, amount'),
         supabase.from('v_client_balances').select('*'),
         supabase.from('v_inbox_summary').select('*'),
         supabase.from('v_pending_24h').select('id', { count: 'exact' }),
+        supabase.from('inbox_items').select('status, amount, created_at'),
       ]);
 
     const items = inboxRes.data || [];
@@ -183,8 +334,22 @@ export default function DashboardPage() {
     });
     setBalances((balancesRes.data as ClientBalance[]) || []);
     setSummary((summaryRes.data as InboxSummary[]) || []);
+
+    const chartItems = chartDataRes.data || [];
+    setDailyVolume(buildDailyVolume(chartItems));
+    setCumulativeData(buildCumulativeData(chartItems as { status: string; amount: number | null; created_at: string }[]));
     setLoading(false);
   }
+
+  const pieData = useMemo(() => {
+    return summary
+      .filter((s) => s.count > 0)
+      .map((s) => ({
+        name: STATUS_CHART_LABELS[s.status] || s.status,
+        value: s.count,
+        fill: STATUS_CHART_COLORS[s.status] || '#6b7280',
+      }));
+  }, [summary]);
 
   if (loading) {
     return (
@@ -203,7 +368,7 @@ export default function DashboardPage() {
           Dashboard
         </h1>
         <p className="text-slate-400 mt-1">
-          Vista general de la operación
+          Vista general de la operacion
         </p>
       </div>
 
@@ -234,11 +399,150 @@ export default function DashboardPage() {
         <StatCard
           title="Pendientes >24h"
           value={stats.pendientes24h.toString()}
-          subtitle="Requieren atención"
+          subtitle="Requieren atencion"
           icon={AlertTriangle}
           color="bg-red-500/10 text-red-400"
           trend={stats.pendientes24h > 0 ? 'down' : undefined}
         />
+      </div>
+
+      {/* Charts Row 1: Bar + Donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Bar Chart - Daily Volume */}
+        <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-blue-400" />
+            Volumen Diario (14 dias)
+          </h2>
+          {dailyVolume.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={dailyVolume} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  axisLine={{ stroke: '#475569' }}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip content={<ChartTooltipContent />} />
+                <Bar
+                  dataKey="recibidos"
+                  name="Recibidos"
+                  fill="#3b82f6"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={24}
+                />
+                <Bar
+                  dataKey="verificados"
+                  name="Verificados"
+                  fill="#22c55e"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={24}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-slate-500 text-sm py-16 text-center">
+              No hay datos para mostrar
+            </p>
+          )}
+        </div>
+
+        {/* Pie/Donut Chart - Status Distribution */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+            <PieChartIcon className="w-5 h-5 text-purple-400" />
+            Por Estado
+          </h2>
+          {pieData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="45%"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={index} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip content={<PieTooltipContent />} />
+                <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value: string) => (
+                    <span className="text-slate-300 text-xs">{value}</span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-slate-500 text-sm py-16 text-center">
+              No hay comprobantes
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Chart Row 2: Area Chart - Cumulative Verified */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+          <Activity className="w-5 h-5 text-emerald-400" />
+          Monto Verificado Acumulado (30 dias)
+        </h2>
+        {cumulativeData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={cumulativeData}>
+              <defs>
+                <linearGradient id="gradientVerified" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: '#475569' }}
+                tickLine={false}
+                interval={4}
+              />
+              <YAxis
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: '#475569' }}
+                tickLine={false}
+                tickFormatter={(v: number) =>
+                  v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()
+                }
+              />
+              <Tooltip content={<AreaTooltipContent />} />
+              <Area
+                type="monotone"
+                dataKey="monto"
+                name="Acumulado"
+                stroke="#10b981"
+                strokeWidth={2}
+                fill="url(#gradientVerified)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-slate-500 text-sm py-12 text-center">
+            No hay datos para mostrar
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -264,7 +568,7 @@ export default function DashboardPage() {
                       {b.client_name}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Crédito: {formatCurrency(b.total_credito)} | Débito:{' '}
+                      Credito: {formatCurrency(b.total_credito)} | Debito:{' '}
                       {formatCurrency(b.total_debito)}
                     </p>
                   </div>
@@ -289,7 +593,7 @@ export default function DashboardPage() {
           </h2>
           {summary.length === 0 ? (
             <p className="text-slate-500 text-sm py-8 text-center">
-              No hay comprobantes aún
+              No hay comprobantes aun
             </p>
           ) : (
             <div className="space-y-3">

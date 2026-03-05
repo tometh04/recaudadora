@@ -45,13 +45,13 @@ export async function POST(request: NextRequest) {
             : new Date().toISOString();
 
           // Idempotency: skip if already processed
-          const { data: existing } = await supabase
+          const { data: existingRows } = await supabase
             .from('inbox_items')
             .select('id')
             .eq('wa_message_id', messageId)
-            .single();
+            .limit(1);
 
-          if (existing) continue;
+          if (existingRows && existingRows.length > 0) continue;
 
           let imageUrl: string | null = null;
 
@@ -81,11 +81,15 @@ export async function POST(request: NextRequest) {
                   const imgBuffer = await imgRes.arrayBuffer();
                   const fileName = `wa-${messageId}.jpg`;
 
-                  const { data: uploadData } = await supabase.storage
+                  const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('comprobantes')
                     .upload(fileName, imgBuffer, {
                       contentType: 'image/jpeg',
                     });
+
+                  if (uploadError) {
+                    console.error('Storage upload error:', uploadError.message);
+                  }
 
                   if (uploadData) {
                     const {
@@ -104,7 +108,7 @@ export async function POST(request: NextRequest) {
           let isComprobante = true; // default: let it through (fail-open)
           if (imageUrl && process.env.OPENAI_API_KEY) {
             try {
-              const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+              const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 10000 });
               const res = await openai.chat.completions.create({
                 model: 'gpt-4o-mini',
                 max_tokens: 50,
@@ -127,13 +131,13 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Lookup client by phone
-          const { data: phoneMapping } = await supabase
+          // Lookup client by phone (use limit(1) instead of .single() to avoid throws)
+          const { data: phoneMappings } = await supabase
             .from('client_phones')
             .select('client_id')
             .eq('phone_number', phone)
             .eq('is_active', true)
-            .single();
+            .limit(1);
 
           // Create inbox item
           await supabase.from('inbox_items').insert({
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
             wa_message_id: messageId,
             wa_phone_number: phone,
             wa_timestamp: timestamp,
-            client_id: phoneMapping?.client_id || null,
+            client_id: phoneMappings?.[0]?.client_id || null,
             original_image_url: imageUrl,
           });
         }

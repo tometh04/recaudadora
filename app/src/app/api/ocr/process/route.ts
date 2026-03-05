@@ -69,8 +69,8 @@ export async function POST(request: NextRequest) {
 
     const startTime = Date.now();
 
-    // Call OpenAI Vision
-    const openai = new OpenAI({ apiKey });
+    // Call OpenAI Vision (with timeout)
+    const openai = new OpenAI({ apiKey, timeout: 30000 });
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 1000,
@@ -90,20 +90,35 @@ export async function POST(request: NextRequest) {
 
     const text = response.choices[0]?.message?.content?.trim() || '';
     const jsonStr = text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(jsonStr);
+
+    let parsed: Record<string, any>;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      console.error('OCR JSON parse error. Raw response:', text);
+      // Rollback status so item doesn't stay stuck in ocr_procesando
+      await supabase
+        .from('inbox_items')
+        .update({ status: 'recibido' })
+        .eq('id', inbox_item_id);
+      return NextResponse.json(
+        { error: 'Failed to parse OCR response', raw: text },
+        { status: 422 }
+      );
+    }
 
     const processingTimeMs = Date.now() - startTime;
 
     const ocr = {
-      amount: parsed.amount ?? null,
+      amount: typeof parsed.amount === 'number' ? parsed.amount : parsed.amount ? Number(parsed.amount) || null : null,
       date: parsed.date ?? null,
       reference: parsed.reference ?? null,
       bank_name: parsed.bank_name ?? null,
       account_number: parsed.account_number ?? null,
       description: parsed.description ?? null,
-      amount_confidence: Math.min(1, Math.max(0, parsed.amount_confidence ?? 0)),
-      date_confidence: Math.min(1, Math.max(0, parsed.date_confidence ?? 0)),
-      reference_confidence: Math.min(1, Math.max(0, parsed.reference_confidence ?? 0)),
+      amount_confidence: Math.min(1, Math.max(0, Number(parsed.amount_confidence) || 0)),
+      date_confidence: Math.min(1, Math.max(0, Number(parsed.date_confidence) || 0)),
+      reference_confidence: Math.min(1, Math.max(0, Number(parsed.reference_confidence) || 0)),
     };
 
     // Update inbox_item
@@ -152,6 +167,19 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('OCR processing error:', error);
+
+    // Rollback status so item doesn't stay stuck in ocr_procesando
+    try {
+      const supabase = await createServiceRoleClient();
+      const { inbox_item_id } = await request.clone().json();
+      if (inbox_item_id) {
+        await supabase
+          .from('inbox_items')
+          .update({ status: 'recibido' })
+          .eq('id', inbox_item_id);
+      }
+    } catch { /* best-effort rollback */ }
+
     return NextResponse.json(
       { error: error.message || 'OCR processing failed' },
       { status: 500 }

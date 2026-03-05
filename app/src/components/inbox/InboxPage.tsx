@@ -267,7 +267,9 @@ export default function InboxPage() {
     }
   }
 
+  // Exclude descartado from "Todos" view — only show when explicitly filtered
   const filtered = items.filter((item) => {
+    if (statusFilter === 'todos' && item.status === 'descartado') return false;
     if (statusFilter !== 'todos' && item.status !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -425,7 +427,7 @@ export default function InboxPage() {
             Comprobantes
           </h1>
           <p className="text-muted-foreground mt-1">
-            {items.length} comprobantes totales
+            {items.filter(i => i.status !== 'descartado').length} comprobantes totales
           </p>
         </div>
         <Button onClick={() => setShowUpload(true)}>
@@ -441,7 +443,7 @@ export default function InboxPage() {
           size="sm"
           onClick={() => setStatusFilter('todos')}
         >
-          Todos ({items.length})
+          Todos ({items.filter(i => i.status !== 'descartado').length})
         </Button>
         {Object.entries(STATUS_LABELS).map(([key, label]) => {
           const count = statusCounts[key] || 0;

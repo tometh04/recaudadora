@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import OpenAI from 'openai';
+
+const CLASSIFICATION_PROMPT = `Mirá esta imagen y respondé ÚNICAMENTE con un JSON válido:
+{"is_comprobante": true} o {"is_comprobante": false}
+
+Respondé true SOLO si la imagen es un comprobante de pago, transferencia bancaria, recibo, depósito, o cualquier constancia de transacción financiera.
+Respondé false si es una foto personal, meme, captura de conversación, selfie, paisaje, producto, o cualquier otra cosa que NO sea un comprobante financiero.`;
 
 // GET — WhatsApp webhook verification
 export async function GET(request: NextRequest) {
@@ -93,6 +100,33 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Classify image: is it a comprobante?
+          let isComprobante = true; // default: let it through (fail-open)
+          if (imageUrl && process.env.OPENAI_API_KEY) {
+            try {
+              const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+              const res = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                max_tokens: 50,
+                messages: [
+                  { role: 'system', content: CLASSIFICATION_PROMPT },
+                  {
+                    role: 'user',
+                    content: [
+                      { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+                    ],
+                  },
+                ],
+              });
+              const text = res.choices[0]?.message?.content?.trim() || '';
+              const json = JSON.parse(text.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim());
+              isComprobante = json.is_comprobante === true;
+            } catch (e) {
+              console.error('Classification error (fail-open):', e);
+              isComprobante = true; // if classification fails, let it through
+            }
+          }
+
           // Lookup client by phone
           const { data: phoneMapping } = await supabase
             .from('client_phones')
@@ -104,7 +138,7 @@ export async function POST(request: NextRequest) {
           // Create inbox item
           await supabase.from('inbox_items').insert({
             source: 'whatsapp',
-            status: imageUrl ? 'recibido' : 'recibido',
+            status: isComprobante ? 'recibido' : 'descartado',
             wa_message_id: messageId,
             wa_phone_number: phone,
             wa_timestamp: timestamp,

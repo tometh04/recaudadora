@@ -54,6 +54,7 @@ export const STATUS_LABELS: Record<string, string> = {
   rechazado: 'Rechazado',
   aplicado: 'Aplicado',
   duplicado: 'Duplicado',
+  descartado: 'Descartado',
 };
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -65,6 +66,7 @@ export const STATUS_COLORS: Record<string, string> = {
   rechazado: 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-400',
   aplicado: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400',
   duplicado: 'bg-gray-100 text-gray-800 dark:bg-gray-500/10 dark:text-gray-400',
+  descartado: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-500/10 dark:text-zinc-400',
 };
 
 export const ROLE_LABELS: Record<string, string> = {

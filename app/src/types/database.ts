@@ -8,7 +8,8 @@ export type InboxStatus =
   | 'verificado'
   | 'rechazado'
   | 'aplicado'
-  | 'duplicado';
+  | 'duplicado'
+  | 'descartado';
 export type InboxSource = 'whatsapp' | 'upload_manual' | 'portal_b2b';
 export type OcrConfidence = 'alta' | 'media' | 'baja';
 export type LedgerEntryType = 'credito' | 'debito';
